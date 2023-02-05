@@ -11,6 +11,9 @@ export class Call{
     public static label(_message:string, _duration:number, _worldx:number,_worldy:number){
 
     }
+    public static effect(effect:Effect,x:number,y:number,r:number,color:Color){
+
+    }
 }
 export class NetConnection{
 
@@ -30,7 +33,7 @@ export class World{
 }
 export class Vars{
     public static state:GameState=new GameState();
-    public world:World;
+    public static world:World;
 }
 export function errLog(_e:string){
 
@@ -47,7 +50,12 @@ export class Team{
         return new Team();
     }
 }
+interface Queue<T>{
+    [index:number]:T;
+    add:(v:T)=>void
+}
 export class Unit{
+    public plans:Queue<BuildPlan>;
     public type:UnitType;
     public x:number;
     public y:number;
@@ -97,10 +105,36 @@ export class EventType{
         public unit:Unit;
     }
 }
+export function extend<T>(father:Class<T>,addon:Partial<T>):T{
+    
+    return new father;
+}
 export class UnitType{
     public toString(){
         return "eee";
     }
+    public spawn(team:Team,x:number,y:number){
+        return new Unit();
+    }
+}
+export class Effect{
+
+}
+export class AIController{
+    public unit:Unit;
+    public updateMovement:()=>void;
+    public updateUnit:()=>void;
+    public moveTo:()=>void
+    
+}
+export class Fx{
+    public static hitMeltdown:Effect;
+    public static flakExplosionBig:Effect;
+    public static shootSmokeSmite:Effect;
+    public static mineImpact:Effect;
+    public static titanSmoke:Effect;
+    public static payloadReceive:Effect;
+    public static circleColorSpark:Effect;
 }
 export class UnitTypes{
 public static  mace:UnitType;
@@ -167,7 +201,13 @@ public static  mace:UnitType;
    public static  renale:UnitType;
 }
 export class Color{
+    public static orange:Color;
     public toString(){
         return "eee";
+    }
+}
+export class BuildPlan{
+    constructor(x:number,y:number,r:number,block:Block){
+        
     }
 }

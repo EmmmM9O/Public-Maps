@@ -1,5 +1,5 @@
 
-import { Blocks ,Block,Events,EventType, Unit, Vars, Call, Team} from '../../Apis/Mdt';
+import { Blocks ,Block,Events,EventType, UnitTypes, Vars, Call, Team,Fx,Color, AIController, extend} from '../../Apis/Mdt';
 import {Aim,_ui_} from '../../Apis/Aim';
 interface _Build_{
     x:number;
@@ -17,7 +17,7 @@ interface _Block_{
     update:()=>void,
     arrmo:null,
     block:Block,
-    creat:(x:number,y:number)=>_Build_
+    creat:(x:number,y:number,t:Team)=>_Build_
     children:Array<string>
 }
 interface data{
@@ -42,6 +42,9 @@ interface unitMoney{
 interface ae{
     [index:string]:ud,
 }
+interface _Ai_{
+    BuildAi:()=>AIController
+}
 interface _TaFang_{
     infoUi:_ui_<data3>;
     listUi:_ui_<data2>;
@@ -53,7 +56,8 @@ interface _TaFang_{
     Teams:Array<_Team_>,
     wareTeam:number,
     UnitDamage:ae,
-    unitMoney:unitMoney
+    unitMoney:unitMoney,
+    Ai:_Ai_
 }
 interface data3{
     block:_Block_,
@@ -102,7 +106,8 @@ var TaFang={
                     //UP Block
                     let w=TaFang.Teams[p.team().id].build[v.callback.place]=b.creat(
                         v.callback.build.x,
-                        v.callback.build.y
+                        v.callback.build.y,
+                        p.team()
                     );
                     v.callback.build=w;
                     TaFang.ui.show(p,v.callback);
@@ -137,15 +142,26 @@ var TaFang={
         }
         u.button("取消",(p,d,u)=>{},true);
     }),
+    
     Block:function(){
         this.name="none";
         this.update=()=>{};
         this.arrmo=null;
         this.block=Blocks.air;
-        this.creat=(x:number,y:number):_Build_=>{
+        this.k=2;
+        let that=this;
+        this.creat=(x:number,y:number,t:Team):_Build_=>{
             let b=new TaFang.Build();
             b.x=x;b.y=y;
+            for(let i=that.k*-1;i<=that.k;i++){
+                for(let j=that.k*-1;j<=that.k;j++){
+                    Vars.world.tile(b.x+i,b.y+i).setNet(Blocks.air,Team.get(0),0);
+                }
+            }
+            Call.effect(Fx.titanSmoke,b.x*8,b.y*8,0,Color.orange);
+            let u=UnitTypes.poly.spawn(t,b.x*8,b.y*8);
             return b;
+            
         }
     },
     Blocks:{
@@ -166,7 +182,14 @@ var TaFang={
     Teams:[] as Array<_Team_>,
     wareTeam:1,
     UnitDamage:{},
-    unitMoney:{}
+    unitMoney:{},
+    Ai:{
+        BuildAi:()=>{
+            return extend(AIController,{
+                
+            })
+        }
+    }
 } as _TaFang_;
 
 try{
