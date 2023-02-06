@@ -1,8 +1,24 @@
 export class Block{
+    public size!:number;
+}
+export class Item{
 
+}
+export class Items{
+    public static copper:Item;
+}
+export class Building{
+    public team=new Team();
+    public configure(item:Item|null){
+
+    }
 }
 export class Blocks{
     public static air:Block;
+    public static duo:Block;
+    public static message:Block;
+    public static itemSource:Block;
+    public static mechanicalDrill:Block;
 }
 export class Call{
     public static menu=(_con:any,_id:number,_title:string,_message:string,_op:string[][])=>{
@@ -24,12 +40,18 @@ export class Map{
     }
 }
 export class GameState{
-    public map:Map;
+    public map:Map=new Map();
+}
+export class Tiles{
+    public eachTile(run:(t:Tile)=>void){
+
+    }
 }
 export class World{
     public tile(x:number,y:number){
         return new Tile();
     }
+    public tiles: Tiles = new Tiles;
 }
 export class Vars{
     public static state:GameState=new GameState();
@@ -43,9 +65,14 @@ export class Menus{
         return 0;
     }
 }
+export class Timer{
+    public static schedule(run:()=>void,delaySeconds:number,intervalSeconds:number){
+
+    }
+}
 export class Team{
     public id:number=0;
-    public color:Color;
+    public color!: Color;
     public static get(id:number){
         return new Team();
     }
@@ -54,15 +81,41 @@ interface Queue<T>{
     [index:number]:T;
     add:(v:T)=>void
 }
-export class Unit{
-    public plans:Queue<BuildPlan>;
-    public type:UnitType;
-    public x:number;
-    public y:number;
+export class Unitc{
+    public movePref(var1:Vec2){
+
+    }
+    public isPlayer(){
+        return false;
+    }
+}
+export class Unit implements Unitc{
+    public controller(var1:AIController){
+        
+    }
+    public speed(){
+        return 1
+    }
+    public angleTo(x:number,y:number){
+        return 1
+    }
+    public movePref(var1: Vec2): void{
+
+    }
+    public plans!: Queue<BuildPlan>;
+    public type!: UnitType;
+    public x!: number;
+    public y!: number;
     public within(_x:number,_y:number,_r:number):boolean{
         return true;
     }
-    public team:Team;
+    public kill(){
+
+    }
+    public isPlayer(): boolean {
+        return false;
+    }
+    public team!: Team;
     public toString(){
         return "Unit-"
     }
@@ -82,31 +135,39 @@ export class Events{
     }
 }
 export class Tile{
-    public x:number;
-    public y:number;
+    public block(){
+        return new Block();
+    }
+    public x!: number;
+    public y!: number;
     public setNet(block:Block,team:Team,r:number){
 
     }
+    public build!:Building;
 }
 export class Bullet{
-    public damage:number;
-    public team:Team;
+    public damage!: number;
+    public team!: Team;
+}
+export class Vec2{
+    public trns(angle:number, amount:number){
+        return this;
+    }
 }
 export class EventType{
     public static TapEvent=class{
-        public player:Player;
-        public tile:Tile;
+        public player!: Player;
+        public tile!: Tile;
     }
     public static UnitDestroyEvent=class{
-        public unit:Unit;
+        public unit!: Unit;
     }
     public static UnitDamageEvent=class{
-        public bullet:Bullet;
-        public unit:Unit;
+        public bullet!: Bullet;
+        public unit!: Unit;
     }
-}
-export function extend<T>(father:Class<T>,addon:Partial<T>):T{
-    
+}type addon<T1,T2>=T1 & T2;
+export function extend<T1,T2>(father:Class<T1>,addon:(Partial<T1>&T2)):T1{
     return new father;
 }
 export class UnitType{
@@ -121,10 +182,10 @@ export class Effect{
 
 }
 export class AIController{
-    public unit:Unit;
-    public updateMovement:()=>void;
-    public updateUnit:()=>void;
-    public moveTo:()=>void
+    public unit!: Unit;
+    public updateMovement!: () => void;
+    public updateUnit!: () => void;
+    public moveTo!: () => void;
     
 }
 export class Fx{
@@ -209,5 +270,28 @@ export class Color{
 export class BuildPlan{
     constructor(x:number,y:number,r:number,block:Block){
         
+    }
+    public x!:number;
+    public y!:number;
+    public block!:Block;
+}
+export class WorldLabel{
+    public x!:number;
+    public y!:number;
+    public z!:number;
+    public id!:number;
+    public fontSize!:number;
+    public text!:string;
+    public static create(){
+        return new WorldLabel;
+    }
+    public add(){
+        
+    }
+    public hide(){
+
+    }
+    public remove(){
+
     }
 }

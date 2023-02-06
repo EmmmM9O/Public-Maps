@@ -23,11 +23,17 @@ export class _ui_<T>{
     return this;
   }
 }
-class menuUi{
+class menuUI{
   public createUI<T>():_ui_<T>{
     return new _ui_<T>();
   }
 }
 export class Aim{
-  public static menuUi:menuUi;
+  public static menuUI:menuUI;
+}
+
+export class Console{
+  public static err(e:any){
+
+  }
 }

@@ -1,0 +1,41 @@
+{
+    "indlude": [
+        // 这里的 ./代表的是根目录 src代表的是文件夹 /**代表的是文件夹下的所有文件夹 /*代表的是文件夹下的所有文件
+        // 多个路径用 ， 分隔
+        "./src/**/*"
+    ],
+    "compilerOptions": {
+        // 用来指定ts被编译为ES的版本
+        "target": "ESNext",
+        // 将 class 声明中的字段语义从 【set】 变更为 【Define】
+        "useDefineForClassFields": true,
+        // 指定要使用的模块化解决方案
+        "module": "ESNext",
+        // 指定模块解析策略
+        "moduleResolution": "Node",
+        // 开启严格模式
+        "strict": true,
+        // JSX是一种嵌入式的类似XNL的语法，它可以被转换成合法的JavaScript，jsx是设置转换模式的
+        
+        // 是否开启sourceMap
+        "sourceMap": true,
+        // 是否语序我们在TypeScript模块中导入 json文件
+        "resolveJsonModule": true,
+        // 是否把每个文件堪称单独的模块
+        "isolatedModules": false,
+        // 支持使用 "import a from 'cjs'"的方式引入commonjs包
+        "esModuleInterop": true,
+        // library 管理库的， 一般不用设置
+       
+        // 跳过所有声明文件的类型检查
+        "skipLibCheck": true,
+        
+        // 以下如果在VsCode中会自动判断，不用声明
+        // 当有错误时不生成编译后的文件
+        "noEmitOnError": true,
+        // 不允许隐式any类型
+        "noImplicitAny": true,
+        // 不允许不明确类型的this
+        "noImplicitThis": true
+    }
+}
