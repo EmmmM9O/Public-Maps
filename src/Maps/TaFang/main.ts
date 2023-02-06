@@ -1,6 +1,8 @@
 
-import { Blocks ,Block,Events,EventType, UnitTypes, Vars, Call, Team,Fx,Color, AIController, extend, Vec2, BuildPlan, Timer, WorldLabel, Item, Items} from '../../Apis/Mdt';
+import { Blocks ,Block,Events, UnitTypes,EventType, Vars, Call, Team,Fx,Color, AIController, extend, Vec2, BuildPlan, Timer, WorldLabel, Item, Items, Unit, Groups, _TapEvent_, _UnitDestroyEvent_, _UnitDamageEvent_, Effect, StatusEffect, Units, StatusEffects, UnitType} from '../../Apis/Mdt';
 import {Aim,Console,_ui_} from '../../Apis/Aim';
+import { resolveTypeReferenceDirective } from 'typescript';
+
 interface _Build_<T>{
     x:number;
     y:number;
@@ -49,6 +51,11 @@ interface _Ai_{
     BuildAi:(callback:()=>void,plans:Array<BuildPlan>,finish:()=>void)=>AIController
 }
 interface _TaFang_{
+    str:string,
+    TapRun:(event:_TapEvent_)=>void;
+    UnitD:(event:_UnitDestroyEvent_)=>void;
+    UnitDam:(event:_UnitDamageEvent_)=>void;
+    TimeRun:()=>void;
     clear:()=>void;
     infoUi:_ui_<data3>;
     listUi:_ui_<data2>;
@@ -62,7 +69,10 @@ interface _TaFang_{
     UnitDamage:ae,
     unitMoney:unitMoney,
     Ai:_Ai_,
-    creatTickBlock:<T>(init:(bu:_Build_<tickData&T>)=>_Build_<tickData&T>)=>TickBlock<T>;
+    creatTickBlock:<T>(init:(bu:_Build_<tickData&T>)=>_Build_<tickData&T>,data:T)=>TickBlock<T>;
+    creatDrillBlock:(ore:Block,tick:number,money:number)=>DrillBlock
+    creatEffectBlock:(tick:number,effect:Array<StatusEffect>,time:number,call:(bu:_Build_<tickData>)=>void)=>TickBlock<{}>
+    creatUnitBlock:(unit:UnitType,max:number,effect:Array<StatusEffect>,tick:number)=>UnitBlock;
 }
 interface data3{
     block:_Block_<any>,
@@ -84,6 +94,12 @@ interface tickData{
 interface TickBlock<T> extends _Block_<T&tickData>{
     creat:(x:number,y:number,t:Team,father?:_Build_<any>)=>_Build_<tickData&T>
 }
+interface DrillBlock extends TickBlock<{
+    ore:Block
+}>{}
+interface UnitBlock extends TickBlock<{
+    units:Array<Unit>
+}>{}
 try{
     // @ts-ignore
     TaFang.clear();
@@ -91,11 +107,121 @@ try{
 
 }
 var TaFang={
-    creatTickBlock:<T>(init:(bu:_Build_<tickData&T>)=>_Build_<tickData&T>)=>{
+    str:"",
+    creatUnitBlock(unit, max, effect, tick) {
+        let b=TaFang.creatTickBlock<{
+            units:Array<Unit>
+        }>(
+            (bu)=>{
+                bu.addon.timer.push({
+                    name:"spawnTick",
+                    tick:tick,
+                    run() {
+                        if(bu.addon.units.length>=max){
+                            return false;
+                        }
+                        let u=unit.spawn(Team.get(bu.team),bu.x*8,bu.y*8);
+                        for(let i of effect){
+                            u.apply(i,NaN);
+                        }
+                        bu.addon.units.push(u);
+                        return true;
+                    },
+                    callup(tick) {
+                        let str="[yellow]单位方块\n"+b.name+"\n";
+                        if(tick>0){
+                            str+="[sky]冷却中"+tick;
+                        }else str+="[acid]准备完毕";
+                        str+="\n[pink]单位数量"+bu.addon.units.length+"/"+max;
+                        bu.label.text=str;
+                        for(let i in bu.addon.units){
+                            if(bu.addon.units[i].dead()){
+                                bu.addon.units.splice(Number(i),1);
+                            }
+                        }
+                    }
+                })
+                return bu;
+            },
+            {
+                units:[]
+            }
+        )
+    },
+    creatEffectBlock(tick,effect,time,call){
+        let b=TaFang.creatTickBlock<{}>(
+            (bu)=>{
+                bu.addon.timer.push({
+                    name:"EffectTick",
+                    tick:tick,
+                    run:()=>{
+                        let flag=false;
+                        Units.nearby(Team.get(TaFang.wareTeam),bu.x*8,bu.y*8,8*8,(u=>{
+                            for(let i of effect){
+                                u.apply(i,time);
+                            }
+                            flag=true;
+                        }));
+                        if(flag) call(bu);
+                        return flag;
+                    },
+                    callup(tick){
+                        bu.label.text="[red]buff武器\n"+bu.block.name+"\n";
+                        if(tick>0){
+                            bu.label.text+="[orange]冷却中"+tick;
+                        }else bu.label.text+="[acid]冷却完成";
+                    }
+                })
+                return bu
+            }
+        ,{})
+        return b;
+    },
+    creatDrillBlock(ore:Block,tick:number,money:number){
+        let b=TaFang.creatTickBlock<{
+            ore:Block
+        }>(
+            (bu)=>{
+                for(let i=bu.block.k*-1;i<=bu.block.k;i++){
+                    for(let j=bu.block.k*-1;j<=bu.block.k;j++){
+                        Vars.world.tile(i+bu.x,j+bu.y).setOverlayNet(bu.addon.ore);
+                    }
+                }
+                bu.addon.timer.push({
+                    name:"DirllTick",
+                    tick:tick,
+                    run:()=>{
+                        let t=TaFang.Teams[bu.team];
+                        if(t==null) return true;
+                        TaFang.Teams[bu.team].money+=money;
+                        return true;
+                    },
+                    callup:(tick)=>{
+                        bu.label.text = "[acid][功能方块]\n" + bu.block.name + "\n";
+                        if (tick > 0) {
+                            bu.label.text += "冷却中" + tick;
+                        }
+                        else
+                            bu.label.text += "[acid]+"+money;
+                    }
+                })
+                return bu;
+            },
+            {
+                ore:ore
+            }
+        );  
+        return b;
+    },
+    creatTickBlock:<T>(init:(bu:_Build_<tickData&T>)=>_Build_<tickData&T>,data:T)=>{
         let b=TaFang.creatBlock<tickData&T>();
         let w=b.creat;
         b.creat=(x:number,y:number,t:Team,father?:_Build_<any>)=>{
             let bu=w(x,y,t,father);
+            bu.addon=Object.assign({
+                timer:[],
+                ticks:{}
+            },data) as tickData&T;
             bu.update=()=>{
                 for(let i of bu.addon.timer){
                     if(i==null) continue;
@@ -103,10 +229,10 @@ var TaFang={
                     if(tick==null)tick=0;
                     if(tick<=0){
                         if(i.run()){
-                            tick=i.tick;
+                            bu.addon.ticks[i.name]=i.tick;
                         }
                     }else{
-                        tick--;
+                        bu.addon.ticks[i.name]--;
                     }
                     i.callup(tick);
                 }
@@ -293,7 +419,7 @@ var TaFang={
                         last=k;
                     }
                 }
-                if(plans.length<=0&&ro>=360){
+                if(plans.length<=0&&ro>=10){
                     this.unit.kill();
                     finish();
                     return ;
@@ -310,8 +436,95 @@ var TaFang={
               }
             })
         }
-    } as _Ai_
+    } as _Ai_,
+    TapRun(event:_TapEvent_){
+    if(!Vars.state.map.description().startsWith(TaFang.str)) return ;
+        let p=event.player,t=event.tile;
+        if(!p.unit().within(t.x*8,t.y*8,24*8)) return ;
+        let team=TaFang.Teams[p.team().id];
+        if(team==null) return ;
+        for(let i in team.build){
+            let b=team.build[i]
+            if(Math.sqrt(Math.pow(t.x-b.x,2)+Math.pow(t.y-b.y,2))<=1.2){
+                TaFang.ui.show(p,{
+                    place:Number(i),
+                    build:b
+                });
+                break;
+            }
+        }
+    },
+    TimeRun(){
+        if(!Vars.state.map.description().startsWith(TaFang.str)) return ;
+        Groups.player.each(p=>{
+            let t=TaFang.Teams[p.team().id];
+            if(t==null||t.money==null) return;
+            Call.infoToast(p.con,"[orange]当前金币"+t.money,1);
+        });
+        for(let i of TaFang.Teams){
+            if(i==null) continue;
+            for(let b of i.build){
+                b.update();
+            }
+        }
+    },
+    UnitDam(event:_UnitDamageEvent_){
+    if(!Vars.state.map.description().startsWith(TaFang.str)) return ;
+        let unit=event.unit,bullet=event.bullet;
+        if(unit.team.id!=TaFang.wareTeam) return ;
+        if(TaFang.UnitDamage[unit.toString()]==null){
+            TaFang.UnitDamage[unit.toString()]={} as ud;
+        }
+        let k=TaFang.UnitDamage[unit.toString()];
+        if(k[bullet.team.id]==null||isNaN(k[bullet.team.id])){
+            k[bullet.team.id]=0;
+        }
+        k[bullet.team.id]+=bullet.damage;
+        let money=Math.pow(bullet.damage*1.0/400,1.2);
+        let fx;
+        fx=Fx.hitMeltdown;
+        if(bullet.damage>=100){
+            fx=Fx.payloadReceive;
+            Call.effect(Fx.payloadReceive,unit.x,unit.y,0,Color.orange);
+        }
+        if(bullet.damage>=200){
+            fx=Fx.mineImpact
+            Call.effect(Fx.mineImpact,unit.x,unit.y,0,Color.orange);
+        }
+        for(let i=0;i<=Math.max(Math.min(unit.type.hitSize*0.3,6),3);i++){
+            let x=Math.floor(Math.random()*unit.type.hitSize)-unit.type.hitSize*0.5;
+            let y=Math.floor(Math.random()*unit.type.hitSize)-unit.type.hitSize*0.5;
+            Call.effect(fx,x+unit.x,y+unit.y,0,Color.orange);
+        }
+        if(money<=0) return ;
+        if(money>=1)Call.label('[#'+bullet.team.color.toString()+']+'+money,0.3,unit.x,unit.y);
+        TaFang.Teams[bullet.team.id].money+=money;
+    },
+    UnitD(event:_UnitDestroyEvent_){
+    if(!Vars.state.map.description().startsWith(TaFang.str)) return ;
+        let unit=event.unit;
+        if(unit.team.id!=TaFang.wareTeam) return ;
+        let max=0,maxt=-1;
+        for(let i in TaFang.UnitDamage[unit.toString()]){
+            let d=TaFang.UnitDamage[unit.toString()][i];
+            if(d>max){
+                maxt=Number(i);
+                max=d;
+            }
+        }
+        if(maxt!=-1){
+            Call.effect(Fx.shootSmokeSmite,unit.x,unit.y,0,Color.orange);
+            let money=TaFang.unitMoney[unit.type.toString()];
+            if(isNaN(money)||money==null) money=0;
+            if(money<=0) return ;
+            Call.label('[#'+Team.get(maxt).color.toString()+']+'+money,0.3,unit.x,unit.y)
+            TaFang.Teams[maxt].money+=money;
+    }
+}
 } as _TaFang_;
+let drill=TaFang.Blocks.drill=TaFang.creatDrillBlock(Blocks.oreCopper,10,10);
+drill.name="普通转头";drill.cost=20;drill.block=Blocks.mechanicalDrill;
+/*
 let drill=TaFang.Blocks.drill=TaFang.creatTickBlock<{}>(
     (bu:_Build_<{}&tickData>)=>{
         bu.addon.timer.push({
@@ -324,16 +537,26 @@ let drill=TaFang.Blocks.drill=TaFang.creatTickBlock<{}>(
                 return true;
             },
             callup(tick){
-                bu.label.text="[功能方块]/n"+bu.block.name+"\n";
+                bu.label.text="[acid][功能方块]/n"+bu.block.name+"\n";
                 if(tick>0){
                     bu.label.text="冷却中"+tick;
                 }else bu.label.text+="[acid]+10";
             }
         })
         return bu;
-});
+},{});
 drill.name="普通钻头";drill.cost=15;
 drill.block=Blocks.mechanicalDrill;
+*/
+let iceTall=TaFang.Blocks.IceTall=TaFang.creatEffectBlock(3,[StatusEffects.freezing,StatusEffects.wet],30,
+    (bu)=>{
+        Call.effect(Fx.circleColorSpark,bu.x*8,bu.y*8,0,Color.sky)
+    });
+iceTall.name="冰塔";iceTall.cost=30;
+iceTall.block=Blocks.regenProjector;
+let flareBlock=TaFang.Blocks.flareBlock=TaFang.creatUnitBlock(UnitTypes.flare,10,[StatusEffects.overclock,StatusEffects.overdrive],10);
+flareBlock.cost=30;flareBlock.name="flare工厂";
+flareBlock.block=Blocks.airFactory;
 TaFang.Blocks.duo=TaFang.creatBlock();
 TaFang.Blocks.duo.name="双管";
 TaFang.Blocks.duo.cost=5;
@@ -341,7 +564,7 @@ TaFang.Blocks.duo.arrmo=Items.copper;
 TaFang.Blocks.air=TaFang.creatBlock();
 TaFang.Blocks.duo.block=Blocks.duo;
 TaFang.Blocks.air.name="空气";
-TaFang.Blocks.air.children.push("duo","drill");
+TaFang.Blocks.air.children.push("duo","drill","IceTall","flareBlock");
 TaFang.Blocks.air.creat=<T>(x:number,y:number,t:Team):_Build_<T>=>{
     let b=TaFang.creatBuild(WorldLabel.create());
     b.x=x;b.y=y;b.block=TaFang.Blocks.air;
@@ -365,78 +588,28 @@ try{
     // @ts-ignore
     TaFangLoad.w=0;
 }catch(_){
-    let str=""
     let TaFangLoad={};
     Timer.schedule(()=>{
-        for(let i of TaFang.Teams){
-            if(i==null) continue;
-            for(let b of i.build){
-                b.update();
-            }
-        }
-    },0.1,0.1)
+        TaFang.TimeRun();
+    },1,1)
     Events.on(EventType.TapEvent,(event)=>{
         try{
-        if(!Vars.state.map.description().startsWith(str)) return ;
-        let p=event.player,t=event.tile;
-        if(!p.unit().within(t.x*8,t.y*8,24*8)) return ;
-        let team=TaFang.Teams[p.team().id];
-        if(team==null) return ;
-        for(let i in team.build){
-            let b=team.build[i]
-            if(Math.sqrt(Math.pow(t.x-b.x,2)+Math.pow(t.y-b.y,2))<=1.2){
-                TaFang.ui.show(p,{
-                    place:Number(i),
-                    build:b
-                });
-                break;
-            }
-        }
+        TaFang.TapRun(event);
     }catch(e){
         Console.err(e);
     }
     });
     Events.on(EventType.UnitDamageEvent,(event)=>{
         try{
-        if(!Vars.state.map.description().startsWith(str)) return ;
-        let unit=event.unit,bullet=event.bullet;
-        if(unit.team.id!=TaFang.wareTeam) return ;
-        if(TaFang.UnitDamage[unit.toString()]==null){
-            TaFang.UnitDamage[unit.toString()]={} as ud;
-        }
-        let k=TaFang.UnitDamage[unit.toString()];
-        if(k[bullet.team.id]==null||isNaN(k[bullet.team.id])){
-            k[bullet.team.id]=0;
-        }
-        k[bullet.team.id]+=bullet.damage;
-        let money=Math.pow(bullet.damage*1.0/100,1.2);
-        if(money<=0) return ;
-        Call.label('[#'+bullet.team.color.toString()+']+'+money,0.3,unit.x,unit.y);
-        TaFang.Teams[bullet.team.id].money+=money;
+        TaFang.UnitDam(event);
     }catch(e){
         Console.err(e);
     }
     });
     Events.on(EventType.UnitDestroyEvent,event=>{
         try{
-        if(!Vars.state.map.description().startsWith(str)) return ;
-        let unit=event.unit;
-        if(unit.team.id!=TaFang.wareTeam) return ;
-        let max=0,maxt=-1;
-        for(let i in TaFang.UnitDamage[unit.toString()]){
-            let d=TaFang.UnitDamage[unit.toString()][i];
-            if(d>max){
-                maxt=Number(i);
-                max=d;
-            }
-        }
-        if(maxt!=-1){
-            let money=TaFang.unitMoney[unit.type.toString()];
-            if(isNaN(money)||money==null) money=0;
-            if(money<=0) return ;
-            Call.label('[#'+Team.get(maxt).color.toString()+']+'+money,0.3,unit.x,unit.y)
-            TaFang.Teams[maxt].money+=money;
-        }}catch(e){
+            TaFang.UnitD(event)
+        }catch(e){
             Console.err(e);
         }
     });
