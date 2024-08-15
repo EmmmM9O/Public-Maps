@@ -38,6 +38,15 @@ import {
   LogicBlock,
   Liquids,
   LExecutor,
+  UnitEntity,
+  Prov,
+  prov,
+  CoreBlock,
+  Seq,
+  Astar,
+  InputHandler,
+  NetClient,
+  Menus,
 } from "../../Apis/Mdt";
 import { Aim, Console, _ui_ } from "../../Apis/Aim";
 import { ArrayTypeNode } from "typescript";
@@ -49,11 +58,20 @@ interface TD2_Build<T> {
   team: Team;
   update?: () => void;
 }
+
 interface TD2_Team {
   id: number;
   money: number;
   team: Team;
-  displayInfo: (player: Player) => string;
+  displayInfo: () => string;
+  updateS: () => void;
+  update: () => void;
+  updateCoreLabel: () => void;
+  coreLabels: { [index: number]: WorldLabel };
+  coreHealth: { [index: number]: number };
+  last_add: number;
+  last_remove: number;
+  money_increase: number;
 }
 interface TD2_Block<T> {
   cost: number;
@@ -63,7 +81,7 @@ interface TD2_Block<T> {
   ammo: null | Item;
   liquid: null | Liquid;
   block: Block;
-  create: (tile: TD2_Tile, t: Team) => TD2_Build<T>;
+  create: (tile: TD2_Tile, team: Team) => TD2_Build<T>;
   children: Array<string>;
   father?: string;
   k: number;
@@ -109,6 +127,8 @@ try {
   TD2.clear();
 } catch (_) {}
 interface TD2_Type {
+  floors: Array<number>;
+  TDAi: (type: UnitType) => AIController | null;
   buildingIndex: number;
   liquidIndex: number;
   worldProcessorTile: Tile;
@@ -142,6 +162,96 @@ interface TD2_Type {
   update: () => void;
 }
 var TD2: TD2_Type = {
+  floors: [
+    Blocks.metalFloor2.id,
+    Blocks.metalFloor.id,
+    Blocks.metalFloor3.id,
+    Blocks.metalFloor4.id,
+    Blocks.metalFloor5.id,
+  ],
+  TDAi(type): AIController {
+    return extend<
+      AIController,
+      {
+        superAi?: any;
+        path?: Seq<Tile>;
+        lastCore?: CoreBlock.CoreBuild;
+        repath: number;
+        pathProgress: number;
+        vect?: Vec2;
+      }
+    >(AIController, {
+      repath: 0,
+      pathProgress: 0,
+      updateMovement() {
+        if (this.unit == null) return;
+        if (this.unit.team != TD2.waveTeam) {
+          this.unit.controller = this.superAi;
+          try {
+            this.superAi.unit(this.unit);
+          } catch (e) {
+            this.superAi.unit = this.unit;
+          }
+          return;
+        }
+        try {
+          let core = this.unit.closestEnemyCore();
+          if (core) {
+            if (
+              this.path == null ||
+              this.lastCore != core ||
+              this.repath < Date.now()
+            ) {
+              this.lastCore = core;
+              let path = Astar.pathfind(
+                this.unit.tileOn().x,
+                this.unit.tileOn().y,
+                core ? Math.floor(core.x / 8) : 0,
+                core ? Math.floor(core.y / 8) : 0,
+                extend<Astar.TileHueristic, {}>(
+                  (Astar as any).TileHueristic as any,
+                  {
+                    cost(tile) {
+                      return TD2.floors.includes(tile.floor().id)
+                        ? TD2.floors.indexOf(tile.floor().id)
+                        : 3000;
+                    },
+                  }
+                ),
+                (b) =>
+                  TD2.floors.includes(b.floor().id) &&
+                  (b.solid() == false || b.block() instanceof CoreBlock) &&
+                  ((this.unit as UnitEntity).pathType() == 2
+                    ? b.floor().isLiquid
+                    : true)
+              );
+              this.path = new Seq();
+              path.each((a) => (this.path as Seq<Tile>).add(a));
+              this.pathProgress = 0;
+              this.repath = Date.now() + 30000;
+            }
+            if (this.pathProgress >= this.path.size) return;
+            let next = this.path.get(this.pathProgress);
+            if (this.vect == undefined) this.vect = new Vec2(0, 0);
+            this.unit.movePref(
+              this.vect.trns(
+                this.unit.angleTo(next.x * 8, next.y * 8),
+                this.unit.speed()
+              )
+            );
+            if (this.unit.within(next.x * 8, next.y * 8, 4))
+              this.pathProgress++;
+          }
+          (this.faceTarget as any)();
+        } catch (e) {
+          Console.err(e);
+        }
+      },
+      retarget() {
+        return false;
+      },
+    });
+  },
   buildingIndex: 0,
   liquidIndex: 0,
   worldProcessorTile: Vars.world.tile(0, 0),
@@ -152,6 +262,10 @@ var TD2: TD2_Type = {
       if (tile.build == null) return;
       if (tile.build.update == null) return;
       tile.build.update();
+    }
+    for (let index in TD2.teams) {
+      let team = TD2.teams[index];
+      team.update();
     }
   },
   syncLiquid(build, liquid) {
@@ -165,8 +279,29 @@ var TD2: TD2_Type = {
       this.buildingIndex,
       build
     );
-    Call.syncVariable(this.worldProcessorTile.build, this.buildingIndex, build);
-    Call.syncVariable(this.worldProcessorTile.build, this.liquidIndex, liquid);
+    if (Vars.net.server) {
+      Call.syncVariable(
+        this.worldProcessorTile.build,
+        this.buildingIndex,
+        build
+      );
+      Call.syncVariable(
+        this.worldProcessorTile.build,
+        this.liquidIndex,
+        liquid
+      );
+    } else {
+      LExecutor.syncVariable(
+        this.worldProcessorTile.build,
+        this.buildingIndex,
+        build
+      );
+      LExecutor.syncVariable(
+        this.worldProcessorTile.build,
+        this.liquidIndex,
+        liquid
+      );
+    }
   },
   listUi: Aim.menuUI
     .createUI<TD2_List_UI_Data>()
@@ -178,7 +313,7 @@ var TD2: TD2_Type = {
         "]升级\n" +
         (TD2.teams[p.team().id] == null
           ? "Error Empty Team"
-          : TD2.teams[p.team().id].displayInfo(p))
+          : TD2.teams[p.team().id].displayInfo())
     )
     .eles((p, v, u) => {
       let team = TD2.teams[p.team().id];
@@ -198,10 +333,11 @@ var TD2: TD2_Type = {
           (p, v, u) => {
             if (team.money >= b.cost) {
               Timer.schedule(() => {
-                let w = (v.tile.build = b.create(v.tile, p.team()));
-                TD2.mainUi.show(p, { tile: v.tile });
+                v.tile.build = b.create(v.tile, p.team());
                 team.money -= b.cost;
-              }, 0.15);
+                team.last_remove += b.cost;
+                TD2.mainUi.show(p, { tile: v.tile });
+              }, 0.6);
             } else {
               v.noMoney = true;
               TD2.listUi.show(p, v);
@@ -231,7 +367,7 @@ var TD2: TD2_Type = {
       (p, s, u) =>
         (TD2.teams[p.team().id] == null
           ? "Error Empty Team"
-          : TD2.teams[p.team().id].displayInfo(p)) +
+          : TD2.teams[p.team().id].displayInfo()) +
         "\n" +
         (s.tile.build == null
           ? "ERROR EMPTY BUILD"
@@ -255,10 +391,42 @@ var TD2: TD2_Type = {
           );
           u.row();
         }
-        if (d.tile.build.block != TD2.blocks.air) {
-          u.button("[red]拆除", (p, d, u) => {}, false)
+        if (
+          d.tile.build.block != TD2.blocks.air &&
+          d.tile.build.block.father != null
+        ) {
+          u.button(
+            "[red]拆除",
+            (p, v, u) => {
+              let team = TD2.teams[p.team().id];
+              v.tile.build = TD2.blocks.air.create(v.tile, p.team());
+              let now = v.tile.build.block as TD2_Block<any>;
+              let num = 0;
+              while (now.father != null) {
+                num += now.cost;
+                now = TD2.blocks[now.father];
+              }
+              team.money += num * 0.6;
+              team.last_add += num * 0.6;
+              TD2.mainUi.show(p, { tile: v.tile });
+            },
+            false
+          )
             .row()
-            .button("[red]降级", (p, d, u) => {}, false)
+            .button(
+              "[red]降级",
+              (p, v, u) => {
+                Timer.schedule(() => {
+                  let team = TD2.teams[p.team().id];
+                  let b = TD2.blocks[v.tile.build?.block.father as string];
+                  v.tile.build = b.create(v.tile, p.team());
+                  team.money += v.tile.build.block.cost * 0.6;
+                  team.last_add += v.tile.build.block.cost * 0.6;
+                  TD2.mainUi.show(p, { tile: v.tile });
+                }, 0.6);
+              },
+              false
+            )
             .row();
         }
       }
@@ -319,6 +487,19 @@ var TD2: TD2_Type = {
         },
       })
     );
+    Vars.content.units().each((ut) => {
+      let lastController = ut.aiController;
+      ut.aiController = prov(() => {
+        if (!TD2.checkMap()) return lastController.get();
+        let tAi = TD2.TDAi(ut);
+        if (tAi == null) return lastController.get();
+        try {
+          // @ts-ignore
+          tAi.superAi = lastController.get();
+        } catch (e) {}
+        return tAi;
+      });
+    });
   },
   actionFilter(action) {
     if (!TD2.checkMap()) return true;
@@ -330,9 +511,7 @@ var TD2: TD2_Type = {
     if (type == types.placeBlock) {
       return false;
     }
-    if (type == types.configure) {
-      return false;
-    }
+
     return true;
   },
   checkMap(): boolean {
@@ -408,10 +587,23 @@ var TD2: TD2_Type = {
         Vars.world.tile(b.x, b.y).setNet(b.block.block, t, 0);
         let bu = Vars.world.tile(b.x, b.y).build;
         if (this.ammo != null) {
-          Call.transferItemTo(null, this.ammo, 10000, b.x * 8, b.y * 8, bu);
+          if (Vars.net.server) {
+            Call.clearItems(bu);
+            Call.transferItemTo(null, this.ammo, 5000, b.x * 8, b.y * 8, bu);
+          } else {
+            InputHandler.clearItems(bu);
+            InputHandler.transferItemTo(
+              null,
+              this.ammo,
+              5000,
+              b.x * 8,
+              b.y * 8,
+              bu
+            );
+          }
         }
         if (this.liquid != null) {
-          let u = null;
+          let u: any = null;
           if (b.block.block.size <= 2) {
             u = UnitTypes.emanate.spawn(b.team, b.x * 8, b.y * 8);
           } else if (b.block.block.size <= 3) {
@@ -422,17 +614,30 @@ var TD2: TD2_Type = {
             return b;
           }
           bu.liquids.set(this.liquid, 10000);
-          Call.pickedBuildPayload(u, bu, true);
-          Timer.schedule(() => {
-            Call.payloadDropped(u, u.x, u.y);
-            u.kill();
-          }, 0.15);
+          if (Vars.net.server) {
+            Call.pickedBuildPayload(u, bu, true);
+            Timer.schedule(() => {
+              Call.payloadDropped(u, u.x, u.y);
+              u.kill();
+            }, 0.5);
+          } else {
+            InputHandler.pickedBuildPayload(u, bu, true);
+            Timer.schedule(() => {
+              InputHandler.payloadDropped(u, u.x, u.y);
+              u.kill();
+            }, 0.5);
+          }
         }
         return b;
       },
     };
     if (run != null) {
       run(that);
+    }
+    if (children != null) {
+      for (let child of children) {
+        child.father = that.baseName;
+      }
     }
     return that;
   },
@@ -480,17 +685,32 @@ var TD2: TD2_Type = {
       }
     }
     if (maxt != -1) {
-      Call.effect(Fx.shootSmokeSmite, unit.x, unit.y, 0, Color.orange);
+      if (Vars.net.server) {
+        Call.effect(Fx.shootSmokeSmite, unit.x, unit.y, 0, Color.orange);
+      } else {
+        NetClient.effect(Fx.shootSmokeSmite, unit.x, unit.y, 0, Color.orange);
+      }
       let money = TD2.unitMoney[unit.type.toString()];
       if (isNaN(money) || money == null) money = 0;
       if (money <= 0) return;
-      Call.label(
-        "Dead[#" + Team.get(maxt).color.toString() + "]+" + money,
-        0.3,
-        unit.x,
-        unit.y
-      );
-      TD2.teams[maxt].money += money;
+      if (Vars.net.server) {
+        Call.label(
+          "Dead[#" + Team.get(maxt).color.toString() + "]+" + money,
+          0.3,
+          unit.x,
+          unit.y
+        );
+      } else {
+        Menus.label(
+          "Dead[#" + Team.get(maxt).color.toString() + "]+" + money,
+          0.3,
+          unit.x,
+          unit.y
+        );
+      }
+      let team = TD2.teams[maxt];
+      team.money += money;
+      team.last_add += money;
     }
   },
   onUnitDamageEvent(event: _UnitDamageEvent_): void {
@@ -541,28 +761,109 @@ var TD2: TD2_Type = {
         unit.x,
         unit.y
       );
-    TD2.teams[bullet.team.id].money += money;
+    let team = TD2.teams[bullet.team.id];
+    team.money += money;
+    team.last_add += money;
   },
   timerRun(): void {
-    if (!this.checkMap()) {
-      this.clear();
+    if (!TD2.checkMap()) {
+      TD2.clear();
       return;
     }
+
     Groups.player.each((p) => {
-      let t = this.teams[p.team().id];
+      let t = TD2.teams[p.team().id];
       if (t == null || t.money == null) return;
-      Call.infoToast(p.con, t.displayInfo(p), 1);
+      Call.infoToast(p.con, t.displayInfo(), 1);
     });
+    for (let index in TD2.teams) {
+      let team = TD2.teams[index];
+      team.updateS();
+    }
   },
   createTeam(id: number, money: number): TD2_Team {
     let res: TD2_Team = {
+      money_increase: 0,
       id: id,
       money: money,
       team: Team.get(id),
-      displayInfo(player): string {
-        return "[orange]当前金币" + this.money;
+      last_add: 0,
+      last_remove: 0,
+      displayInfo(): string {
+        return (
+          "[#" +
+          Team.get(this.id).color.toString() +
+          "]队伍:" +
+          this.id +
+          "\n[orange]当前金币" +
+          this.money +
+          "\n[acid]收入" +
+          this.last_add +
+          "/s\n[red]支出" +
+          this.last_remove +
+          "/s\n" +
+          (this.last_add > this.last_remove ? "[acid]净利润" : "[red]净亏损") +
+          Math.abs(this.last_add - this.last_remove) +
+          "/s"
+        );
+      },
+      update() {
+        let t = this.money_increase / 60.0 / 20;
+        this.money += t;
+        this.last_add += t;
+      },
+      updateS() {
+        this.last_add = 0;
+        this.last_remove = 0;
+        Team.get(id)
+          .data()
+          .cores.each((core) => {
+            Units.nearby(
+              TD2.waveTeam,
+              core.x,
+              core.y,
+              (core.block.size / 2 + 3) * 8,
+              (u) => {
+                let index = core.tile().pos();
+                this.coreHealth[index]--;
+                this.coreLabels[index].text =
+                  this.displayInfo() + "\n[red]血量:" + this.coreHealth[index];
+                if (this.coreHealth[index] <= 0) {
+                  this.coreLabels[index].remove();
+                  core.kill();
+                }
+                u.kill();
+              }
+            );
+          });
+      },
+      coreHealth: {},
+      coreLabels: {},
+      updateCoreLabel() {
+        Team.get(id)
+          .data()
+          .cores.each((core) => {
+            let index = core.tile().pos();
+            this.coreLabels[index].text =
+              this.displayInfo() + "\n[red]血量:" + this.coreHealth[index];
+            this.money_increase += core.block.size * core.block.size;
+          });
       },
     };
+    Team.get(id)
+      .data()
+      .cores.each((core) => {
+        let index = core.tile().pos();
+        let label = WorldLabel.create();
+        label.x = core.x;
+        label.y = core.y;
+        label.fontSize = 2;
+        label.add();
+        res.coreLabels[index] = label;
+        res.coreHealth[index] = core.block.size * core.block.size;
+        TD2.labels.push(label);
+      });
+    res.updateCoreLabel();
     this.teams[id] = res;
     return res;
   },

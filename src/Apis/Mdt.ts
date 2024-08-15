@@ -1,8 +1,44 @@
+export class Net {
+  public server!: boolean;
+  public active!: boolean;
+  public client(): boolean {
+    return true;
+  }
+}
+export class NetClient{
+  public static effect(
+    _effect: Effect,
+    _x: number,
+    _y: number,
+    _r: number,
+    _color: Color
+  ) {}
+}
+
 export class UnlockableContent {
   public localizedName!: string;
+  public id!: number;
 }
 export class Block extends UnlockableContent {
   public size!: number;
+  public isLiquid!: boolean;
+}
+export class InputHandler {
+  public static clearItems(_build: Building): void {}
+  public static transferItemTo(
+    _unit: Unit | null,
+    _item: Item,
+    _amount: number,
+    _x: number,
+    _y: number,
+    _build: Building
+  ) {}
+  public static pickedBuildPayload(
+    _unit: Unit,
+    _build: Building,
+    _onGround: boolean
+  ): void {}
+  public static payloadDropped(_unit: Unit, _x: number, _y: number) {}
 }
 export class Item extends UnlockableContent {}
 export class Items {
@@ -29,6 +65,9 @@ export class Items {
   public static fissileMatter: Item;
   public static dormantCyst: Item;
 }
+export interface Prov<T> {
+  get: () => T;
+}
 export interface Entityc {
   self: <T extends Entityc>() => T;
   as: <T>() => T;
@@ -45,9 +84,20 @@ export class Building implements Entityc, Buildingc {
   public timeScale(): number {
     return 0;
   }
+  public tile(): Tile {
+    return new Tile();
+  }
   public configure(_item: Item | null) {}
+  public x!: number;
+  public y!: number;
   public block!: Block;
   public liquids!: LiquidModule;
+  public kill(): void {}
+}
+export class ContentLoader {
+  public units(): Seq<UnitType> {
+    return new Seq<UnitType>();
+  }
 }
 export class Blocks {
   public static air: Block;
@@ -475,17 +525,18 @@ export class Call {
   public static syncVariable(_building: Building, _index: number, _obj: any) {}
   public static infoToast(_con: NetConnection, _str: string, _time: number) {}
   public static pickedBuildPayload(
-    unit: Unit,
-    build: Building,
-    onGround: boolean
+    _unit: Unit,
+    _build: Building,
+    _onGround: boolean
   ): void {}
-  public static payloadDropped(unit: Unit, x: number, y: number) {}
+  public static payloadDropped(_unit: Unit, _x: number, _y: number) {}
+  public static clearItems(_build: Building) {}
 }
 export class LiquidModule {
-  public get(liquid: Liquid): number {
+  public get(_liquid: Liquid): number {
     return 0;
   }
-  public set(liquid: Liquid, num: number): void {}
+  public set(_liquid: Liquid, _num: number): void {}
 }
 export class NetConnection {}
 export class Map {
@@ -511,6 +562,8 @@ export class Seq<T> {
   }
   public add(_data: T): void {}
   public insert(_index: number, _data: T): void {}
+  public each(_func: (t: T) => void): void {}
+  public size!: number;
 }
 
 export class Administration {
@@ -551,6 +604,9 @@ export var Vars = {
   state: new GameState(),
   world: new World(),
   netServer: new NetServer(),
+  content: new ContentLoader(),
+  net: new Net(),
+  netClient:new NetClient()
 }; /*
 export class Vars {
     public static state: GameState = new GameState();
@@ -561,6 +617,13 @@ export class Menus {
   public static registerMenu = (_func: (p: any, o: number) => void): number => {
     return 0;
   };
+  public static label(
+    _message: string,
+    _duration: number,
+    _worldx: number,
+    _worldy: number
+  ) {}
+  public static infoToast(_str: string, _time: number) {}
 }
 export class Timer {
   public static schedule(
@@ -574,6 +637,19 @@ export class Team {
   public color!: Color;
   public static get(_id: number) {
     return new Team();
+  }
+  public data(): Teams.TeamData {
+    return new Teams.TeamData();
+  }
+}
+export class CoreBlock extends Block {}
+export namespace CoreBlock {
+  export class CoreBuild extends Building {}
+}
+export class Teams {}
+export namespace Teams {
+  export class TeamData {
+    public cores!: Seq<CoreBlock.CoreBuild>;
   }
 }
 interface Queue<T> {
@@ -615,7 +691,17 @@ export class Unit implements Unitc {
 }
 export class UnitEntity extends Unit {
   public health!: number;
+  public closestEnemyCore(): CoreBlock.CoreBuild {
+    return new CoreBlock.CoreBuild();
+  }
+  public tileOn(): Tile {
+    return new Tile();
+  }
+  public pathType(): number {
+    return 0;
+  }
 }
+
 export class Groups {
   public static player = class {
     public static each(_run: (p: Player) => void) {}
@@ -633,10 +719,13 @@ export class Player {
 type Class<T> = new (...args: any[]) => T;
 export class Events {
   public static on<T>(_event: Class<T>, _func: (event: T) => void) {}
-  public static run<T>(t: T, _func: () => void) {}
+  public static run<T>(_t: T, _func: () => void) {}
 }
 export class Tile {
   public block() {
+    return new Block();
+  }
+  public floor(): Block {
     return new Block();
   }
   public x!: number;
@@ -647,6 +736,9 @@ export class Tile {
   public build!: Building;
   public pos(): number {
     return 0;
+  }
+  public solid(): boolean {
+    return false;
   }
 }
 export class BulletType {
@@ -663,6 +755,7 @@ export class Vec2 {
   public trns(_angle: number, _amount: number) {
     return this;
   }
+  public constructor(_x: number, _y: number) {}
 }
 export interface _TapEvent_ {
   player: Player;
@@ -705,8 +798,16 @@ export function extend<T1, T2>(
 ): T1 {
   return new father();
 }
+export function prov<T>(func: () => T): Prov<T> {
+  return {
+    get(): T {
+      return func();
+    },
+  };
+}
 export class UnitType {
   public hitSize!: number;
+  public aiController!: Prov<any>;
   public toString() {
     return "eee";
   }
@@ -715,11 +816,31 @@ export class UnitType {
   }
 }
 export class Effect {}
-export class AIController {
+export class AIController implements UnitController {
   public unit!: UnitEntity;
   public updateMovement!: () => void;
   public updateUnit!: () => void;
   public moveTo!: () => void;
+  public retarget!: () => boolean;
+  public faceTarget: () => void = () => {};
+}
+export interface UnitController {}
+export class Astar {
+  public static pathfind(
+    _startX: number,
+    _startY: number,
+    _endX: number,
+    _endY: number,
+    _th: Astar.TileHueristic,
+    _passable: (t: Tile) => boolean
+  ): Seq<Tile> {
+    return new Seq<Tile>();
+  }
+}
+export namespace Astar {
+  export interface TileHueristic {
+    cost: (tile: Tile) => number;
+  }
 }
 export class Fx {
   public static hitMeltdown: Effect;
