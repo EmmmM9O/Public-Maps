@@ -5,7 +5,12 @@ export class Net {
     return true;
   }
 }
-export class NetClient{
+export class WaveSpawner {
+  public getSpawns(): Seq<Tile> {
+    return new Seq();
+  }
+}
+export class NetClient {
   public static effect(
     _effect: Effect,
     _x: number,
@@ -84,9 +89,7 @@ export class Building implements Entityc, Buildingc {
   public timeScale(): number {
     return 0;
   }
-  public tile(): Tile {
-    return new Tile();
-  }
+  public tile!: Tile;
   public configure(_item: Item | null) {}
   public x!: number;
   public y!: number;
@@ -494,6 +497,7 @@ export class Blocks {
   public static interplanetaryAccelerator: Block;
 }
 export class Call {
+  public static setRules(rules: Rules) {}
   public static menu = (
     _con: any,
     _id: number,
@@ -544,8 +548,38 @@ export class Map {
     return "so";
   }
 }
+export class Rules {
+  public teams: Rules.TeamRules = new Rules.TeamRules();
+}
+export namespace Rules {
+  export class TeamRules {
+    public get(team: Team): TeamRule {
+      return new TeamRule();
+    }
+  }
+  export class TeamRule {
+    public aiCoreSpawn = true;
+    public cheat!: boolean;
+    public infiniteResources!: boolean;
+    public infiniteAmmo!: boolean;
+    public buildAi!: boolean;
+    public buildAiTier = 1;
+    public rtsAi!: boolean;
+    public rtsMinSquad = 4;
+    public rtsMaxSquad = 1000;
+    public rtsMinWeight = 1.2;
+    public unitBuildSpeedMultiplier = 1;
+    public unitDamageMultiplier = 1;
+    public unitCrashDamageMultiplier = 1;
+    public unitCostMultiplier = 1;
+    public unitHealthMultiplier = 1;
+    public blockHealthMultiplier = 1;
+    public blockDamageMultiplier = 1;
+  }
+}
 export class GameState {
   public map: Map = new Map();
+  public rules: Rules = new Rules();
 }
 export class Tiles {
   public eachTile(_run: (t: Tile) => void) {}
@@ -606,7 +640,8 @@ export var Vars = {
   netServer: new NetServer(),
   content: new ContentLoader(),
   net: new Net(),
-  netClient:new NetClient()
+  netClient: new NetClient(),
+  spawner: new WaveSpawner(),
 }; /*
 export class Vars {
     public static state: GameState = new GameState();
@@ -662,6 +697,7 @@ export class Unitc {
     return false;
   }
 }
+export class WeaponMount {}
 export class Unit implements Unitc {
   public apply(_effect: StatusEffect, _time: number) {}
   public controller(_var1: AIController) {}
@@ -671,8 +707,10 @@ export class Unit implements Unitc {
   public angleTo(_x: number, _y: number) {
     return 1;
   }
+  public flag!: number;
   public movePref(_var1: Vec2): void {}
   public plans!: Queue<BuildPlan>;
+  public mounts!: Array<WeaponMount>;
   public type!: UnitType;
   public dead!: boolean;
   public x!: number;
@@ -755,7 +793,7 @@ export class Vec2 {
   public trns(_angle: number, _amount: number) {
     return this;
   }
-  public constructor(_x: number, _y: number) {}
+  public constructor(_x?: number, _y?: number) {}
 }
 export interface _TapEvent_ {
   player: Player;
@@ -784,6 +822,7 @@ export class EventType {
   public static GameOverEvent = class {
     public winner!: Team;
   };
+  public static WaveEvent = class {};
 }
 export namespace EventType {
   export enum Trigger {
@@ -808,10 +847,14 @@ export function prov<T>(func: () => T): Prov<T> {
 export class UnitType {
   public hitSize!: number;
   public aiController!: Prov<any>;
+  public flying!: boolean;
   public toString() {
     return "eee";
   }
   public spawn(_team: Team, _x: number, _y: number) {
+    return new UnitEntity();
+  }
+  public create(team: Team) {
     return new UnitEntity();
   }
 }
@@ -843,13 +886,248 @@ export namespace Astar {
   }
 }
 export class Fx {
+  public static unitPickup: Effect;
+  public static coreLandDust: Effect;
+  public static fireballsmoke: Effect;
   public static hitMeltdown: Effect;
+  public static plasticExplosion: Effect;
+  public static padlaunch: Effect;
+  public static hitEmpSpark: Effect;
+  public static lancerLaserCharge: Effect;
+  public static rand: Effect;
+  public static unitDrop: Effect;
+  public static neoplasmHeal: Effect;
+  public static fireHit: Effect;
+  public static colorTrail: Effect;
+  public static sapped: Effect;
   public static flakExplosionBig: Effect;
+  public static blastExplosion: Effect;
+  public static pointHit: Effect;
+  public static plasticburn: Effect;
+  public static overclocked: Effect;
+  public static unitSpirit: Effect;
+  public static blockCrash: Effect;
   public static shootSmokeSmite: Effect;
+  public static surgeCruciSmoke: Effect;
+  public static casing3Double: Effect;
+  public static lightningCharge: Effect;
+  public static mine: Effect;
+  public static trailFade: Effect;
+  public static pointBeam: Effect;
+  public static missileTrailSmoke: Effect;
+  public static coreBuildShockwave: Effect;
+  public static v: Effect;
+  public static pulverize: Effect;
+  public static healBlock: Effect;
+  public static payloadDeposit: Effect;
+  public static dropItem: Effect;
+  public static ventSteam: Effect;
+  public static hitLaserColor: Effect;
+  public static greenLaserCharge: Effect;
+  public static unitShieldBreak: Effect;
+  public static hitFlameSmall: Effect;
+  public static railHit: Effect;
+  public static electrified: Effect;
+  public static shootSmokeSquareBig: Effect;
+  public static unitWreck: Effect;
   public static mineImpact: Effect;
+  public static hitFlameBeam: Effect;
+  public static unitDust: Effect;
+  public static oily: Effect;
+  public static healBlockFull: Effect;
   public static titanSmoke: Effect;
+  public static mineBig: Effect;
+  public static regenSuppressSeek: Effect;
+  public static lightBlock: Effect;
+  public static mineWallSmall: Effect;
   public static payloadReceive: Effect;
+  public static casing1: Effect;
+  public static casing2: Effect;
+  public static explosion: Effect;
+  public static healWave: Effect;
+  public static casing3: Effect;
+  public static landShock: Effect;
+  public static casing4: Effect;
+  public static shootSmokeSquare: Effect;
+  public static upgradeCoreBloom: Effect;
+  public static healWaveDynamic: Effect;
+  public static mineSmall: Effect;
+  public static plasticExplosionFlak: Effect;
+  public static shootSmokeMissile: Effect;
+  public static select: Effect;
+  public static colorSpark: Effect;
+  public static shootSmallFlame: Effect;
+  public static drillSteam: Effect;
+  public static lancerLaserShoot: Effect;
+  public static mineImpactWave: Effect;
+  public static titanExplosion: Effect;
+  public static unitControl: Effect;
+  public static shootSmokeDisperse: Effect;
+  public static shootPayloadDriver: Effect;
+  public static magmasmoke: Effect;
+  public static placeBlock: Effect;
+  public static unitEnvKill: Effect;
+  public static bubble: Effect;
+  public static dooropen: Effect;
+  public static missileTrail: Effect;
+  public static colorSparkBig: Effect;
+  public static vapor: Effect;
+  public static regenParticle: Effect;
+  public static ballfire: Effect;
+  public static overdriveWave: Effect;
+  public static doorcloselarge: Effect;
+  public static airBubble: Effect;
+  public static hitSquaresColor: Effect;
+  public static hitLiquid: Effect;
+  public static instShoot: Effect;
+  public static shieldApply: Effect;
+  public static shockwave: Effect;
+  public static lancerLaserShootSmoke: Effect;
+  public static commandSend: Effect;
+  public static hitMeltHeal: Effect;
+  public static shootSmallSmoke: Effect;
+  public static teleport: Effect;
+  public static itemTransfer: Effect;
+  public static teleportOut: Effect;
+  public static heal: Effect;
+  public static incendTrail: Effect;
+  public static upgradeCore: Effect;
+  public static shootSmall: Effect;
+  public static neoplasmSplat: Effect;
+  public static railShoot: Effect;
+  public static pulverizeRed: Effect;
+  public static disperseTrail: Effect;
+  public static burning: Effect;
+  public static arcShieldBreak: Effect;
+  public static spawn: Effect;
+  public static conveyorPoof: Effect;
+  public static freezing: Effect;
+  public static incinerateSlag: Effect;
+  public static shootBig2: Effect;
+  public static absorb: Effect;
+  public static coreBurn: Effect;
+  public static fire: Effect;
+  public static lightning: Effect;
   public static circleColorSpark: Effect;
+  public static turbinegenerate: Effect;
+  public static shootTitan: Effect;
+  public static smokePuff: Effect;
+  public static rocketSmoke: Effect;
+  public static hitLaserBlast: Effect;
+  public static casing2Double: Effect;
+  public static massiveExplosion: Effect;
+  public static moveCommand: Effect;
+  public static fireRemove: Effect;
+  public static melting: Effect;
+  public static launchPod: Effect;
+  public static flakExplosion: Effect;
+  public static doorclose: Effect;
+  public static unitAssemble: Effect;
+  public static sparkShoot: Effect;
+  public static overdriveBlockFull: Effect;
+  public static crawlDust: Effect;
+  public static instTrail: Effect;
+  public static blockExplosionSmoke: Effect;
+  public static launch: Effect;
+  public static unitCapKill: Effect;
+  public static fluxVapor: Effect;
+  public static rotateBlock: Effect;
+  public static reactorExplosion: Effect;
+  public static regenSuppressParticle: Effect;
+  public static shootSmokeSquareSparse: Effect;
+  public static hitBulletColor: Effect;
+  public static coreLaunchConstruct: Effect;
+  public static tapBlock: Effect;
+  public static sparkExplosion: Effect;
+  public static fireSmoke: Effect;
+  public static generate: Effect;
+  public static bigShockwave: Effect;
+  public static shootBigColor: Effect;
+  public static shootSmallColor: Effect;
+  public static hitFuse: Effect;
+  public static dooropenlarge: Effect;
+  public static smeltsmoke: Effect;
+  public static ripple: Effect;
+  public static greenCloud: Effect;
+  public static randLifeSpark: Effect;
+  public static hitLaser: Effect;
+  public static lava: Effect;
+  public static hitBeam: Effect;
+  public static breakBlock: Effect;
+  public static shootLiquid: Effect;
+  public static rocketSmokeLarge: Effect;
+  public static hitFlamePlasma: Effect;
+  public static greenLaserChargeSmall: Effect;
+  public static attackCommand: Effect;
+  public static shieldWave: Effect;
+  public static coalSmeltsmoke: Effect;
+  public static unitLandSmall: Effect;
+  public static instBomb: Effect;
+  public static shieldBreak: Effect;
+  public static healWaveMend: Effect;
+  public static unitLand: Effect;
+  public static shootBig: Effect;
+  public static none: Effect;
+  public static chainLightning: Effect;
+  public static pointShockwave: Effect;
+  public static scatheSlash: Effect;
+  public static overdriven: Effect;
+  public static shootHealYellow: Effect;
+  public static thoriumShoot: Effect;
+  public static mineHuge: Effect;
+  public static heatReactorSmoke: Effect;
+  public static hitLancer: Effect;
+  public static smokeCloud: Effect;
+  public static forceShrink: Effect;
+  public static shootSmokeTitan: Effect;
+  public static blastsmoke: Effect;
+  public static sporeSlowed: Effect;
+  public static despawn: Effect;
+  public static dynamicWave: Effect;
+  public static unitDespawn: Effect;
+  public static artilleryTrailSmoke: Effect;
+  public static lancerLaserChargeBegin: Effect;
+  public static artilleryTrail: Effect;
+  public static dynamicExplosion: Effect;
+  public static chainEmp: Effect;
+  public static lightningShoot: Effect;
+  public static shootHeal: Effect;
+  public static muddy: Effect;
+  public static wet: Effect;
+  public static pickup: Effect;
+  public static neoplasiaSmoke: Effect;
+  public static scatheLight: Effect;
+  public static greenBomb: Effect;
+  public static fallSmoke: Effect;
+  public static vaporSmall: Effect;
+  public static missileTrailShort: Effect;
+  public static producesmoke: Effect;
+  public static unitSpawn: Effect;
+  public static reactorsmoke: Effect;
+  public static shootBigSmoke: Effect;
+  public static shootPyraFlame: Effect;
+  public static generatespark: Effect;
+  public static scatheExplosion: Effect;
+  public static dynamicSpikes: Effect;
+  public static impactReactorExplosion: Effect;
+  public static teleportActivate: Effect;
+  public static redgeneratespark: Effect;
+  public static pulverizeSmall: Effect;
+  public static coreBuildBlock: Effect;
+  public static legDestroy: Effect;
+  public static shootBigSmoke2: Effect;
+  public static hitBulletBig: Effect;
+  public static sapExplosion: Effect;
+  public static instHit: Effect;
+  public static spawnShockwave: Effect;
+  public static railTrail: Effect;
+  public static hitBulletSmall: Effect;
+  public static steam: Effect;
+  public static formsmoke: Effect;
+  public static breakProp: Effect;
+  public static pulverizeMedium: Effect;
+  public static smoke: Effect;
+  public static fuelburn: Effect;
 }
 export class UnitTypes {
   public static mace: UnitType;
