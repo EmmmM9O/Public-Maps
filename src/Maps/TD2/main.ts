@@ -90,6 +90,7 @@ interface TD2_Block<T> {
   k: number;
   displayInfo: (tile: TD2_Tile, player: Player) => string;
   display: (player: Player) => string;
+  check?: (tile: TD2_Tile) => boolean;
 }
 interface TD2_Tile {
   tile: Tile;
@@ -131,6 +132,11 @@ interface TD2_Core_UI_Data {
   build: Building;
   team: TD2_Team;
 }
+interface TD2_DirllBlcok {
+  speed: number;
+  point: number;
+  progress: number;
+}
 try {
   // @ts-ignore
   TD2.clear();
@@ -158,8 +164,15 @@ interface TD2_Type {
   createTile: (tile: Tile) => TD2_Tile;
   createBlock: <T>(
     run?: (block: TD2_Block<T>) => void,
-    children?: Array<TD2_Block<any>>
+    children?: Array<TD2_Block<any>>,
+    createF?: (build: TD2_Build<T>) => void
   ) => TD2_Block<T>;
+  createDirllBlock: (
+    speed: number,
+    point: number,
+    run?: (block: TD2_Block<TD2_DirllBlcok>) => void,
+    children?: Array<TD2_Block<any>>
+  ) => TD2_Block<TD2_DirllBlcok>;
   blocks: TD2_Blocks;
   createBuild: <T>(tile: TD2_Tile) => TD2_Build<T>;
   timerRun: () => void;
@@ -201,6 +214,7 @@ var TD2: TD2_Type = {
           let u = UnitTypes.elude.spawn(TD2.waveTeam, tile.x * 8, tile.y * 8);
           u.type = type;
           u.mounts = type.create(Team.get(0)).mounts;
+          u.apply(StatusEffects.slow, 1000);
           unit.kill();
           u.flag = 114514;
         }
@@ -258,14 +272,10 @@ var TD2: TD2_Type = {
         u.text((p, d, u) => "[violet]科技点数:" + d.team.point);
         u.button(
           (p, d, u) =>
-            (d.team.money >= 508 ? "[acid]" : "[red]") + "消耗500恢复一点血量",
+            (d.team.money >= 500 ? "[acid]" : "[red]") + "消耗500研发一点科技",
           () => {
             if (d.team.money >= 500) {
-              if (
-                d.team.coreHealth[d.tile.pos()] > 0 &&
-                d.team.coreHealth[d.tile.pos()] <
-                  d.build.block.size * d.build.block.size
-              ) {
+              if (d.team.coreHealth[d.tile.pos()] > 0) {
                 d.team.money -= 500;
                 d.team.last_remove += 500;
                 d.team.point++;
@@ -283,12 +293,12 @@ var TD2: TD2_Type = {
             "[orange]资源倍率:" +
             Math.round(d.team.resourcePoint * 100) +
             "% -> " +
-            (Math.round(d.team.resourcePoint * 100) + 10) +
+            (Math.round(d.team.resourcePoint * 100) + 5) +
             "%",
           (p, d, u) => {
             if (d.team.point > 0) {
               d.team.point--;
-              d.team.resourcePoint += 0.1;
+              d.team.resourcePoint += 0.05;
             }
             TD2.coreUi.show(p, d);
           },
@@ -299,12 +309,12 @@ var TD2: TD2_Type = {
             "[sky]伤害倍率:" +
             Math.round(d.team.damagePoint * 100) +
             "% -> " +
-            (Math.round(d.team.damagePoint * 100) + 10) +
+            (Math.round(d.team.damagePoint * 100) + 5) +
             "%",
           (p, d, u) => {
             if (d.team.point > 0) {
               d.team.point--;
-              d.team.damagePoint += 0.1;
+              d.team.damagePoint += 0.05;
               Vars.state.rules.teams.get(p.team()).blockDamageMultiplier =
                 d.team.damagePoint;
               Vars.state.rules.teams.get(p.team()).unitDamageMultiplier =
@@ -336,7 +346,7 @@ var TD2: TD2_Type = {
       repath: 0,
       pathProgress: 0,
       updateMovement() {
-        if (this.unit == null) return;
+        if (this.unit == null || this.unit.flag != 114514) return;
         if (
           this.unit.type == UnitTypes.emanate ||
           this.unit.type == UnitTypes.quad ||
@@ -426,17 +436,7 @@ var TD2: TD2_Type = {
     }
   },
   syncLiquid(build, liquid) {
-    LExecutor.syncVariable(
-      this.worldProcessorTile.build,
-      this.liquidIndex,
-      liquid
-    );
-    LExecutor.syncVariable(
-      this.worldProcessorTile.build,
-      this.buildingIndex,
-      build
-    );
-    if (Vars.net.server) {
+    if (Vars.net.server()) {
       Call.syncVariable(
         this.worldProcessorTile.build,
         this.buildingIndex,
@@ -478,6 +478,7 @@ var TD2: TD2_Type = {
       for (let i of v.block.children) {
         let b = TD2.blocks[i];
         if (b.block.size > v.tile.max_size) continue;
+        if (b.check != null && !b.check(v.tile)) continue;
         u.button(
           (p, v, u) => {
             return (
@@ -533,7 +534,7 @@ var TD2: TD2_Type = {
 
     .eles((p, d, u) => {
       if (d.tile != null && d.tile.build != null) {
-        if (d.tile.build.block.block.size < d.tile.max_size) {
+        if (d.tile.build.block.block.size <= d.tile.max_size) {
           u.button(
             "升级",
             (p, d, u) => {
@@ -757,9 +758,56 @@ var TD2: TD2_Type = {
       addon: undefined,
     };
   },
+  createDirllBlock(
+    speed: number,
+    point: number,
+    run?: (block: TD2_Block<TD2_DirllBlcok>) => void,
+    children?: Array<TD2_Block<any>>
+  ): TD2_Block<TD2_DirllBlcok> {
+    let that = this.createBlock<TD2_DirllBlcok>(run, children, (b) => {
+      b.addon = { speed: speed, point: point, progress: 0 };
+      b.update = () => {
+        if (b.addon == null) return;
+        let team = TD2.teams[b.team.id];
+        let build = Vars.world.tile(b.x, b.y).build;
+        let add =
+          b.addon.speed *
+          team.resourcePoint *
+          (build == null ? 1.0 : build.timeScale());
+        team.money += add;
+        team.last_add += add;
+        let tile = TD2.tiles[Vars.world.tile(b.x, b.y).pos()];
+        if (b.addon.point != 0) {
+          b.addon.progress += build.timeScale() * team.resourcePoint;
+          if (b.addon.progress >= b.addon.point) {
+            team.point++;
+          }
+        }
+        tile.label.text =
+          "[sky]砖井:" +
+          that.name +
+          "\n[orange]资源:" +
+          Math.round(add * 60) +
+          "/s" +
+          (b.addon.point == 0
+            ? ""
+            : "\n[violet]科技点生产:" +
+              Math.round(b.addon.progress) +
+              "/" +
+              Math.round(b.addon.point) +
+              "\n速度:+" +
+              Math.round(build.timeScale() * team.resourcePoint));
+      };
+    });
+    that.displayInfo;
+    that.liquid = null;
+    that.ammo = null;
+    return that;
+  },
   createBlock<T>(
     run?: (block: TD2_Block<T>) => void,
-    children?: Array<TD2_Block<any>>
+    children?: Array<TD2_Block<any>>,
+    createF?: (build: TD2_Build<T>) => void
   ): TD2_Block<T> {
     let that: TD2_Block<T> = {
       name: "none",
@@ -803,7 +851,7 @@ var TD2: TD2_Type = {
         Call.effect(Fx.launchPod, b.x * 8, b.y * 8, 0, Color.orange);
 
         if (this.ammo != null) {
-          if (Vars.net.server) {
+          if (Vars.net.server()) {
             Call.clearItems(bu);
             Call.transferItemTo(null, this.ammo, 5000, b.x * 8, b.y * 8, bu);
           } else {
@@ -832,7 +880,7 @@ var TD2: TD2_Type = {
           u.apply(StatusEffects.invincible, 60 * 60 * 60);
           u.apply(StatusEffects.unmoving, 60 * 60 * 60);
           bu.liquids.set(this.liquid, 10000);
-          if (Vars.net.server) {
+          if (Vars.net.server()) {
             Call.pickedBuildPayload(u, bu, true);
             Timer.schedule(() => {
               u.x = b.x * 8;
@@ -854,6 +902,7 @@ var TD2: TD2_Type = {
             }, 1);
           }
         }
+        if (createF != null) createF(b);
         return b;
       },
     };
@@ -931,7 +980,7 @@ var TD2: TD2_Type = {
       }
     }
     if (maxt != -1) {
-      if (Vars.net.server) {
+      if (Vars.net.server()) {
         Call.effect(Fx.shootSmokeSmite, unit.x, unit.y, 0, Color.orange);
         Call.effect(Fx.lightningShoot, unit.x, unit.y, 0, Color.orange);
         Call.effect(Fx.circleColorSpark, unit.x, unit.y, 0, Color.orange);
@@ -943,7 +992,7 @@ var TD2: TD2_Type = {
       let money = TD2.unitMoney[unit.type.toString()];
       if (isNaN(money) || money == null) money = 0;
       if (money <= 0) return;
-      if (Vars.net.server) {
+      if (Vars.net.server()) {
         Call.label(
           "Dead[#" + Team.get(maxt).color.toString() + "]+" + money,
           0.3,
@@ -959,8 +1008,8 @@ var TD2: TD2_Type = {
         );
       }
       let team = TD2.teams[maxt];
-      team.money += money * team.resourcePoint;
-      team.last_add += money * team.resourcePoint;
+      team.money += money * team.resourcePoint * 0.9;
+      team.last_add += money * team.resourcePoint * 0.9;
     }
   },
   onUnitDamageEvent(event: _UnitDamageEvent_): void {
@@ -978,7 +1027,7 @@ var TD2: TD2_Type = {
     }
     k[bullet.team.id] += bullet.damage;
     let money = Math.pow(
-      (Math.min(bullet.damage, unit.health) * 1.0) / 100,
+      (Math.min(bullet.damage, unit.health) * 1.0) / 80,
       1.5
     );
     if (isNaN(money)) money = 0;
@@ -1038,7 +1087,7 @@ var TD2: TD2_Type = {
       resourcePoint: 1,
       damagePoint: Vars.state.rules.teams.get(Team.get(id))
         .blockDamageMultiplier,
-      point: 4,
+      point: 5,
       money_increase: 0,
       id: id,
       money: money,
@@ -1052,20 +1101,20 @@ var TD2: TD2_Type = {
           "]队伍:" +
           this.id +
           "\n[orange]当前金币" +
-          this.money +
+          Math.round(this.money) +
           "\n[acid]收入" +
-          this.last_add +
+          Math.round(this.last_add) +
           "/s\n[red]支出" +
-          this.last_remove +
+          Math.round(this.last_remove) +
           "/s\n" +
           (this.last_add > this.last_remove ? "[acid]净利润" : "[red]净亏损") +
-          Math.abs(this.last_add - this.last_remove) +
+          Math.round(Math.abs(this.last_add - this.last_remove)) +
           "/s\n[violet]可用科技点数:" +
           this.point
         );
       },
       update() {
-        let t = (this.money_increase / 60.0 / 10) * this.resourcePoint;
+        let t = (this.money_increase / 60.0 / 20) * this.resourcePoint;
         this.money += t;
         this.last_add += t;
       },
@@ -1079,7 +1128,11 @@ var TD2: TD2_Type = {
               "\n[red]血量:" +
               this.coreHealth[index] +
               "/" +
-              core.block.size * core.block.size;
+              core.block.size * core.block.size +
+              "\n[sky]点击进入菜单" +
+              "\n[orange]资源:" +
+              Math.round((core.block.size * core.block.size) / 20) +
+              "/s";
             if (this.coreHealth[index] > 0) {
               Units.nearby(
                 TD2.waveTeam,
@@ -1094,7 +1147,11 @@ var TD2: TD2_Type = {
                     "\n[red]血量:" +
                     this.coreHealth[index] +
                     "/" +
-                    core.block.size * core.block.size;
+                    core.block.size * core.block.size +
+                    "\n[sky]点击进入菜单" +
+                    "\n[orange]资源:" +
+                    Math.round((core.block.size * core.block.size) / 20) +
+                    "/s";
                   if (this.coreHealth[index] <= 0) {
                     this.coreLabels[index].hide();
                     this.coreLabels[index].remove();
@@ -1105,6 +1162,7 @@ var TD2: TD2_Type = {
                       0,
                       Color.orange
                     );
+                    this.money_increase -= core.block.size * core.block.size;
                     core.kill();
                   }
                   Call.effect(Fx.unitCapKill, u.x, u.y, 0, Color.orange);
@@ -1222,7 +1280,7 @@ TD2.blocks.air = TD2.createBlock<{}>(
                           block.name = "钍幽灵";
                           block.baseName = "spectre1";
                           block.block = Blocks.spectre;
-                          block.cost = 1000;
+                          block.cost = 2000;
                           block.ammo = Items.thorium;
                           block.liquid = Liquids.cryofluid;
                         })),
@@ -1244,7 +1302,7 @@ TD2.blocks.air = TD2.createBlock<{}>(
                       block.name = "石墨幽灵";
                       block.baseName = "spectre2";
                       block.block = Blocks.spectre;
-                      block.cost = 500;
+                      block.cost = 900;
                       block.ammo = Items.graphite;
                       block.liquid = Liquids.cryofluid;
                     })),
@@ -1258,12 +1316,12 @@ TD2.blocks.air = TD2.createBlock<{}>(
                         block.liquid = Liquids.cryofluid;
                       },
                       [
-                        (TD2.blocks.cyclone = TD2.createBlock<{}>(
+                        (TD2.blocks.cycloneX = TD2.createBlock<{}>(
                           (block) => {
                             block.name = "合金气旋";
-                            block.baseName = "cyclone";
+                            block.baseName = "cycloneX";
                             block.block = Blocks.cyclone;
-                            block.cost = 1500;
+                            block.cost = 2000;
                             block.ammo = Items.surgeAlloy;
                             block.liquid = Liquids.cryofluid;
                           },
@@ -1272,7 +1330,7 @@ TD2.blocks.air = TD2.createBlock<{}>(
                               block.name = "天谴";
                               block.baseName = "smite";
                               block.block = Blocks.smite;
-                              block.cost = 3000;
+                              block.cost = 4000;
                               block.ammo = Items.surgeAlloy;
                               block.liquid = Liquids.water;
                             }, [])),
@@ -1376,9 +1434,9 @@ TD2.blocks.air = TD2.createBlock<{}>(
                 block.liquid = Liquids.water;
               },
               [
-                (TD2.blocks.breach = TD2.createBlock<{}>((block) => {
+                (TD2.blocks.breach1 = TD2.createBlock<{}>((block) => {
                   block.name = "终极撕裂";
-                  block.baseName = "breach";
+                  block.baseName = "breach1";
                   block.block = Blocks.breach;
                   block.cost = 80;
                   block.ammo = Items.tungsten;
@@ -1654,10 +1712,10 @@ TD2.blocks.air = TD2.createBlock<{}>(
             block.liquid = null;
           },
           [
-            (TD2.blocks.lancer = TD2.createBlock<{}>(
+            (TD2.blocks.lancer1 = TD2.createBlock<{}>(
               (block) => {
                 block.name = "高速蓝瑟";
-                block.baseName = "lancer";
+                block.baseName = "lancer1";
                 block.block = Blocks.lancer;
                 block.cost = 100;
                 block.ammo = null;
@@ -1682,6 +1740,165 @@ TD2.blocks.air = TD2.createBlock<{}>(
               block.ammo = Items.surgeAlloy;
               block.liquid = Liquids.cryofluid;
             }, [])),
+          ]
+        )),
+      ]
+    )),
+    (TD2.blocks.steamGenerator = TD2.createBlock<{}>(
+      (block) => {
+        block.name = "涡轮发电机";
+        block.baseName = "steamGenerator";
+        block.block = Blocks.steamGenerator;
+        block.cost = 50;
+        block.ammo = Items.coal;
+        block.liquid = Liquids.water;
+      },
+      [
+        (TD2.blocks.steamGenerator1 = TD2.createBlock<{}>(
+          (block) => {
+            block.name = "进阶涡轮发电机";
+            block.baseName = "steamGenerator1";
+            block.block = Blocks.steamGenerator;
+            block.cost = 60;
+            block.ammo = Items.blastCompound;
+            block.liquid = Liquids.water;
+          },
+          [
+            (TD2.blocks.differentialGenerator = TD2.createBlock<{}>((block) => {
+              block.name = "温差发电机";
+              block.baseName = "differentialGenerator";
+              block.block = Blocks.differentialGenerator;
+              block.cost = 80;
+              block.ammo = Items.coal;
+              block.liquid = Liquids.cryofluid;
+            }, [])),
+          ]
+        )),
+        (TD2.blocks.rtgGenerator = TD2.createBlock<{}>(
+          (block) => {
+            block.name = "终极RTG发电机 ";
+            block.baseName = "rtgGenerator";
+            block.block = Blocks.rtgGenerator;
+            block.cost = 60;
+            block.ammo = Items.fissileMatter;
+            block.liquid = null;
+          },
+          [
+            (TD2.blocks.thoriumReactor = TD2.createBlock<{}>(
+              (block) => {
+                block.name = "钍反应堆";
+                block.baseName = "thoriumReactor";
+                block.block = Blocks.thoriumReactor;
+                block.cost = 70;
+                block.ammo = Items.thorium;
+                block.liquid = Liquids.cryofluid;
+              },
+              [
+                (TD2.blocks.impactDrill = TD2.createBlock<{}>((block) => {
+                  block.name = "冲击反应堆";
+                  block.baseName = "impactDrill";
+                  block.block = Blocks.impactDrill;
+                  block.cost = 200;
+                  block.ammo = Items.blastCompound;
+                  block.liquid = Liquids.cryofluid;
+                }, [])),
+              ]
+            )),
+          ]
+        )),
+      ]
+    )),
+    (TD2.blocks.thermalGenerator = TD2.createBlock<{}>((block) => {
+      block.name = "地热";
+      block.baseName = "thermalGenerator";
+      block.block = Blocks.thermalGenerator;
+      block.cost = 20;
+      block.ammo = null;
+      block.liquid = null;
+      block.check = (tile) =>
+        (Blocks.thermalGenerator as any).canPlaceOn(
+          tile.tile,
+          Team.get(tile.team.id),
+          0
+        );
+    }, [])),
+    (TD2.blocks.overdriveProjector = TD2.createBlock<{}>(
+      (block) => {
+        block.name = "基础超速";
+        block.baseName = "overdriveProjector";
+        block.block = Blocks.overdriveProjector;
+        block.cost = 50;
+        block.ammo = null;
+        block.liquid = null;
+      },
+      [
+        (TD2.blocks.overdriveProjector1 = TD2.createBlock<{}>(
+          (block) => {
+            block.name = "进阶超速";
+            block.baseName = "overdriveProjector1";
+            block.block = Blocks.overdriveProjector;
+            block.cost = 200;
+            block.ammo = Items.phaseFabric;
+            block.liquid = null;
+          },
+          [
+            (TD2.blocks.overdriveDome = TD2.createBlock<{}>(
+              (block) => {
+                block.name = "终极超速";
+                block.baseName = "overdriveDome";
+                block.block = Blocks.overdriveDome;
+                block.cost = 500;
+                block.ammo = Items.phaseFabric;
+                block.liquid = null;
+              },
+              [],
+              (bu) => {
+                let build = Vars.world.tile(bu.x, bu.y).build;
+                Call.transferItemTo(
+                  null,
+                  Items.silicon,
+                  5000,
+                  build.x,
+                  build.y,
+                  build
+                );
+              }
+            )),
+          ]
+        )),
+      ]
+    )),
+    (TD2.blocks.baseDirll = TD2.createDirllBlock(
+      4,
+      0,
+      (block) => {
+        block.name = "基础砖井";
+        block.baseName = "baseDirll";
+        block.block = Blocks.mendProjector;
+        block.cost = 30;
+      },
+      [
+        (TD2.blocks.advancedDirll = TD2.createDirllBlock(
+          12,
+          0,
+          (block) => {
+            block.name = "进阶砖井";
+            block.baseName = "advancedDirll";
+            block.block = Blocks.forceProjector;
+            block.cost = 120;
+          },
+          [
+            (TD2.blocks.finaldDirll = TD2.createDirllBlock(
+              25,
+              0,
+              (block) => {
+                block.name = "终极砖井";
+                block.baseName = "finalDirll";
+                block.block = Blocks.forceProjector;
+                block.cost = 500;
+              },
+              []
+            )),
           ]
         )),
       ]

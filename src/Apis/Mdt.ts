@@ -1,6 +1,10 @@
 export class Net {
-  public server!: boolean;
-  public active!: boolean;
+  public server(): boolean{
+    return true
+  }
+  public active(): boolean{
+    return true
+  }
   public client(): boolean {
     return true;
   }
