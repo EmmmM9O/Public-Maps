@@ -2030,7 +2030,7 @@ TD2.blocks.air = TD2.createBlock<{}>(
       ]
     )),
     (TD2.blocks.baseDirll = TD2.createDirllBlock(
-      4 / 60,
+      4 / 60 /30,
       0,
       (block) => {
         block.name = "基础砖井";
@@ -2040,7 +2040,7 @@ TD2.blocks.air = TD2.createBlock<{}>(
       },
       [
         (TD2.blocks.advancedDirll = TD2.createDirllBlock(
-          12 / 60 / 30,
+          16 / 60 / 30,
           0,
           (block) => {
             block.name = "进阶砖井";
