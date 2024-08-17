@@ -367,7 +367,7 @@ var TD2: TD2_Type = {
           return;
         }
         var core = this.unit.closestEnemyCore();
-        if (core == null) {
+        if (core != null) {
           // @ts-ignore
           this.pathfind(Pathfinder.fieldCore);
         }
