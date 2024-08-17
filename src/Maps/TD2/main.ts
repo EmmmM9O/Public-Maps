@@ -49,7 +49,6 @@ import {
   Menus,
 } from "../../Apis/Mdt";
 import { Aim, Console, _ui_ } from "../../Apis/Aim";
-import { ArrayTypeNode } from "typescript";
 interface TD2_Build<T> {
   x: number;
   y: number;
@@ -343,7 +342,8 @@ var TD2: TD2_Type = {
                 d.team.damagePoint;
               Vars.state.rules.teams.get(p.team()).unitDamageMultiplier =
                 d.team.damagePoint;
-              Call.setRules(Vars.state.rules);
+	      if(Vars.net.server())
+              	Call.setRules(Vars.state.rules);
             }
             TD2.coreUi.show(p, d);
           },
@@ -528,12 +528,18 @@ var TD2: TD2_Type = {
           },
           (p, v, u) => {
             if (team.money >= b.cost) {
+		    if(Vars.net.server()){
               Timer.schedule(() => {
                 v.tile.build = b.create(v.tile, p.team());
                 team.money -= b.cost;
                 team.last_remove += b.cost;
                 TD2.mainUi.show(p, { tile: v.tile });
-              }, 0.6);
+              }, 1.2);}else{
+                v.tile.build = b.create(v.tile, p.team());
+                team.money -= b.cost;
+                team.last_remove += b.cost;
+                TD2.mainUi.show(p, { tile: v.tile });
+	      }
             } else {
               v.noMoney = true;
               TD2.listUi.show(p, v);
@@ -612,6 +618,7 @@ var TD2: TD2_Type = {
             .button(
               "[red]降级",
               (p, v, u) => {
+		      if(Vars.net.server()){
                 Timer.schedule(() => {
                   let team = TD2.teams[p.team().id];
                   let b =
@@ -623,6 +630,17 @@ var TD2: TD2_Type = {
                   team.last_add += v.tile.build.block.cost * 0.6;
                   TD2.mainUi.show(p, { tile: v.tile });
                 }, 1.2);
+		      }else{
+                  let team = TD2.teams[p.team().id];
+                  let b =
+                    TD2.blocks[
+                      (v.tile.build as TD2_Build<any>).block.father as string
+                    ];
+                  v.tile.build = b.create(v.tile, p.team());
+                  team.money += v.tile.build.block.cost * 0.6;
+                  team.last_add += v.tile.build.block.cost * 0.6;
+                  TD2.mainUi.show(p, { tile: v.tile });
+		      }
               },
               true
             )
@@ -887,7 +905,10 @@ var TD2: TD2_Type = {
         b.team = t;
         Vars.world.tile(b.x, b.y).setNet(b.block.block, t, 0);
         let bu = Vars.world.tile(b.x, b.y).build;
-        Call.effect(Fx.launchPod, b.x * 8, b.y * 8, 0, Color.orange);
+	if(Vars.net.server())
+        	Call.effect(Fx.launchPod, b.x * 8, b.y * 8, 0, Color.orange);
+	else
+		NetClient.effect(Fx.launchPod, b.x * 8, b.y * 8, 0, Color.orange);
 
         if (this.ammo != null) {
           if (Vars.net.server()) {
@@ -931,15 +952,7 @@ var TD2: TD2_Type = {
               }, 0.2);
             }, 1);
           } else {
-            InputHandler.pickedBuildPayload(u, bu, true);
-            Timer.schedule(() => {
-              u.x = b.x * 8;
-              u.y = b.y * 8;
-              InputHandler.payloadDropped(u, b.x * 8, b.y * 8);
-              Timer.schedule(() => {
-                u.kill();
-              }, 0.2);
-            }, 1);
+
           }
         }
         if (createF != null) createF(b);
@@ -1068,7 +1081,7 @@ var TD2: TD2_Type = {
     }
     k[bullet.team.id] += bullet.damage;
     let money = Math.pow(
-      (Math.min(bullet.damage, unit.health) * 1.0) / 80,
+      (Math.min(bullet.damage, unit.health) * 1.0) / 200,
       1.5
     );
     if (isNaN(money)) money = 0;
