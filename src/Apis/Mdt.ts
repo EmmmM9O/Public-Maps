@@ -1,9 +1,9 @@
 export class Net {
-  public server(): boolean{
-    return true
+  public server(): boolean {
+    return true;
   }
-  public active(): boolean{
-    return true
+  public active(): boolean {
+    return true;
   }
   public client(): boolean {
     return true;
@@ -32,6 +32,7 @@ export class Block extends UnlockableContent {
   public size!: number;
   public isLiquid!: boolean;
 }
+
 export class InputHandler {
   public static clearItems(_build: Building): void {}
   public static transferItemTo(
@@ -99,6 +100,7 @@ export class Building implements Entityc, Buildingc {
   public y!: number;
   public block!: Block;
   public liquids!: LiquidModule;
+  public items!: ItemModule;
   public kill(): void {}
 }
 export class ContentLoader {
@@ -546,6 +548,12 @@ export class LiquidModule {
   }
   public set(_liquid: Liquid, _num: number): void {}
 }
+export class ItemModule {
+  public get(_liquid: Item): number {
+    return 0;
+  }
+  public set(_liquid: Item, _num: number): void {}
+}
 export class NetConnection {}
 export class Map {
   public description() {
@@ -711,6 +719,7 @@ export class Unit implements Unitc {
   public angleTo(_x: number, _y: number) {
     return 1;
   }
+  public shield!: number;
   public flag!: number;
   public movePref(_var1: Vec2): void {}
   public plans!: Queue<BuildPlan>;
