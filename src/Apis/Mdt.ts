@@ -592,6 +592,7 @@ export namespace Rules {
 export class GameState {
   public map: Map = new Map();
   public rules: Rules = new Rules();
+  public wave: number = 0;
 }
 export class Tiles {
   public eachTile(_run: (t: Tile) => void) {}
@@ -861,6 +862,7 @@ export class UnitType {
   public hitSize!: number;
   public aiController!: Prov<any>;
   public flying!: boolean;
+  public health!: number;
   public toString() {
     return "eee";
   }

@@ -194,7 +194,7 @@ var TD2: TD2_Type = {
           if (unit.flag != 114514) {
             let type = unit.type;
             let u: any = null;
-            let h = unit.health;
+            let h = type.health * 1.2;
             let s = unit.shield;
             if (!type.flying)
               u = UnitTypes.elude.spawn(TD2.waveTeam, unit.x, unit.y);
@@ -204,6 +204,9 @@ var TD2: TD2_Type = {
             u.shield = s;
             u.type = type;
             u.mounts = type.create(Team.get(0)).mounts;
+            if (Vars.state.wave >= 50) {
+              u.apply(StatusEffects.shielded, 10000);
+            }
             if (h >= 6000) {
               u.apply(StatusEffects.overdrive, 10000);
             }
@@ -218,7 +221,7 @@ var TD2: TD2_Type = {
       let index = 0;
       Units.nearby(TD2.waveTeam, 100 * 8, 100 * 8, 16 * 8, (unit) => {
         if (unit.flag != 114514 && unit.type.flying) {
-          let h = unit.health;
+          let h = unit.type.health * 1.2;
           let s = unit.shield;
           let tile = Vars.spawner.getSpawns().get(index);
           index++;
@@ -230,6 +233,9 @@ var TD2: TD2_Type = {
           u.type = type;
           u.mounts = type.create(Team.get(0)).mounts;
           u.apply(StatusEffects.slow, 100000);
+          if (Vars.state.wave >= 50) {
+            u.apply(StatusEffects.shielded, 10000);
+          }
           if (h >= 6000) {
             u.apply(StatusEffects.overdrive, 10000);
           }
@@ -342,8 +348,7 @@ var TD2: TD2_Type = {
                 d.team.damagePoint;
               Vars.state.rules.teams.get(p.team()).unitDamageMultiplier =
                 d.team.damagePoint;
-	      if(Vars.net.server())
-              	Call.setRules(Vars.state.rules);
+              if (Vars.net.server()) Call.setRules(Vars.state.rules);
             }
             TD2.coreUi.show(p, d);
           },
@@ -528,18 +533,19 @@ var TD2: TD2_Type = {
           },
           (p, v, u) => {
             if (team.money >= b.cost) {
-		    if(Vars.net.server()){
-              Timer.schedule(() => {
+              if (Vars.net.server()) {
+                Timer.schedule(() => {
+                  v.tile.build = b.create(v.tile, p.team());
+                  team.money -= b.cost;
+                  team.last_remove += b.cost;
+                  TD2.mainUi.show(p, { tile: v.tile });
+                }, 1.2);
+              } else {
                 v.tile.build = b.create(v.tile, p.team());
                 team.money -= b.cost;
                 team.last_remove += b.cost;
                 TD2.mainUi.show(p, { tile: v.tile });
-              }, 1.2);}else{
-                v.tile.build = b.create(v.tile, p.team());
-                team.money -= b.cost;
-                team.last_remove += b.cost;
-                TD2.mainUi.show(p, { tile: v.tile });
-	      }
+              }
             } else {
               v.noMoney = true;
               TD2.listUi.show(p, v);
@@ -618,8 +624,19 @@ var TD2: TD2_Type = {
             .button(
               "[red]降级",
               (p, v, u) => {
-		      if(Vars.net.server()){
-                Timer.schedule(() => {
+                if (Vars.net.server()) {
+                  Timer.schedule(() => {
+                    let team = TD2.teams[p.team().id];
+                    let b =
+                      TD2.blocks[
+                        (v.tile.build as TD2_Build<any>).block.father as string
+                      ];
+                    v.tile.build = b.create(v.tile, p.team());
+                    team.money += v.tile.build.block.cost * 0.6;
+                    team.last_add += v.tile.build.block.cost * 0.6;
+                    TD2.mainUi.show(p, { tile: v.tile });
+                  }, 1.2);
+                } else {
                   let team = TD2.teams[p.team().id];
                   let b =
                     TD2.blocks[
@@ -629,18 +646,7 @@ var TD2: TD2_Type = {
                   team.money += v.tile.build.block.cost * 0.6;
                   team.last_add += v.tile.build.block.cost * 0.6;
                   TD2.mainUi.show(p, { tile: v.tile });
-                }, 1.2);
-		      }else{
-                  let team = TD2.teams[p.team().id];
-                  let b =
-                    TD2.blocks[
-                      (v.tile.build as TD2_Build<any>).block.father as string
-                    ];
-                  v.tile.build = b.create(v.tile, p.team());
-                  team.money += v.tile.build.block.cost * 0.6;
-                  team.last_add += v.tile.build.block.cost * 0.6;
-                  TD2.mainUi.show(p, { tile: v.tile });
-		      }
+                }
               },
               true
             )
@@ -655,47 +661,47 @@ var TD2: TD2_Type = {
     mace: 40,
     fortress: 120,
     separator: 600,
-    reign: 2000,
+    reign: 1000,
     nova: 5,
     pulsar: 30,
     quasar: 200,
     vela: 800,
-    corvus: 2500,
+    corvus: 1000,
     crawler: 4,
     atrax: 60,
     spiroct: 150,
     arkyid: 700,
-    toxopid: 2300,
+    toxopid: 1000,
     flare: 8,
     horizon: 40,
     zenith: 130,
     antumbra: 800,
-    eclipse: 2700,
+    eclipse: 1000,
     risso: 8,
     minke: 35,
     bryde: 250,
     sei: 900,
-    omura: 3200,
+    omura: 1000,
     retusa: 8,
     oxynoe: 22,
     cyerce: 350,
     aegires: 1000,
-    navanax: 2800,
+    navanax: 1800,
     stell: 3,
     locus: 35,
     precept: 300,
     vanquish: 850,
-    conquer: 2000,
+    conquer: 1800,
     merui: 10,
     cleroi: 25,
     anthicus: 400,
     tecta: 900,
-    collaris: 3000,
+    collaris: 1000,
     elude: 8,
     avert: 30,
     obviate: 300,
     quell: 800,
-    disrupt: 2800,
+    disrupt: 1500,
   },
   waveTeam: Team.get(2),
   applyStarts: "##TD2##",
@@ -905,10 +911,9 @@ var TD2: TD2_Type = {
         b.team = t;
         Vars.world.tile(b.x, b.y).setNet(b.block.block, t, 0);
         let bu = Vars.world.tile(b.x, b.y).build;
-	if(Vars.net.server())
-        	Call.effect(Fx.launchPod, b.x * 8, b.y * 8, 0, Color.orange);
-	else
-		NetClient.effect(Fx.launchPod, b.x * 8, b.y * 8, 0, Color.orange);
+        if (Vars.net.server())
+          Call.effect(Fx.launchPod, b.x * 8, b.y * 8, 0, Color.orange);
+        else NetClient.effect(Fx.launchPod, b.x * 8, b.y * 8, 0, Color.orange);
 
         if (this.ammo != null) {
           if (Vars.net.server()) {
@@ -952,7 +957,6 @@ var TD2: TD2_Type = {
               }, 0.2);
             }, 1);
           } else {
-
           }
         }
         if (createF != null) createF(b);
@@ -1013,6 +1017,7 @@ var TD2: TD2_Type = {
         index: t.build.tile.pos(),
       });
     }
+    if (t.build != null) t = t.build.tile;
     let ti = this.tiles[t.pos()];
     if (ti == null || ti.team.id != p.team().id) return;
     this.mainUi.show(p, { tile: ti });
@@ -1043,7 +1048,7 @@ var TD2: TD2_Type = {
         NetClient.effect(Fx.circleColorSpark, unit.x, unit.y, 0, Color.orange);
       }
       let money = TD2.unitMoney[unit.type.toString()];
-      money /= 10;
+      money /= 25;
       if (isNaN(money) || money == null) money = 0;
       if (money <= 0) return;
       if (Vars.net.server()) {
@@ -1081,7 +1086,7 @@ var TD2: TD2_Type = {
     }
     k[bullet.team.id] += bullet.damage;
     let money = Math.pow(
-      (Math.min(bullet.damage, unit.health) * 1.0) / 200,
+      (Math.min(bullet.damage, unit.health) * 1.0) / 1000,
       1.5
     );
     if (isNaN(money)) money = 0;
@@ -1515,7 +1520,7 @@ TD2.blocks.air = TD2.createBlock<{}>(
                     block.block = Blocks.titan;
                     block.cost = 80;
                     block.ammo = Items.thorium;
-                    block.liquid = null;
+                    block.liquid = Liquids.hydrogen;
                   },
                   [
                     (TD2.blocks.titan1 = TD2.createBlock<{}>(
@@ -1525,7 +1530,8 @@ TD2.blocks.air = TD2.createBlock<{}>(
                         block.block = Blocks.titan;
                         block.cost = 100;
                         block.ammo = Items.thorium;
-                        block.liquid = Liquids.water;
+                        block.liquid = Liquids.hydrogen;
+                        block.liquidE = Liquids.water;
                       },
                       [
                         (TD2.blocks.scathe = TD2.createBlock<{}>((block) => {
@@ -1653,7 +1659,7 @@ TD2.blocks.air = TD2.createBlock<{}>(
             block.name = "基础升华";
             block.baseName = "sublimate";
             block.block = Blocks.sublimate;
-            block.cost = 200;
+            block.cost = 600;
             block.ammo = null;
             block.liquid = Liquids.ozone;
           },
@@ -2043,7 +2049,7 @@ TD2.blocks.air = TD2.createBlock<{}>(
       ]
     )),
     (TD2.blocks.baseDirll = TD2.createDirllBlock(
-      4 / 60 /30,
+      4 / 60 / 30,
       0,
       (block) => {
         block.name = "基础砖井";
@@ -2069,18 +2075,18 @@ TD2.blocks.air = TD2.createBlock<{}>(
                 block.name = "终极砖井";
                 block.baseName = "finalDirll";
                 block.block = Blocks.forceProjector;
-                block.cost = 500;
+                block.cost = 1000;
               },
               []
             )),
             (TD2.blocks.sciDirll = TD2.createDirllBlock(
               12 / 60 / 30,
-              4 * 60 * 60,
+              10 * 60 * 60,
               (block) => {
                 block.name = "科研砖井";
                 block.baseName = "sciDirll";
                 block.block = Blocks.forceProjector;
-                block.cost = 1000;
+                block.cost = 2000;
               },
               []
             )),
